@@ -45,3 +45,8 @@ This template doesn't enforce an opinion on data fetching strategies, but you do
 There is lengthy debate on what the right approach will be for each use case. I encourage you to think critically about what one is best for you. If you're not sure, try starting with the TanStack query option and try pre-fetching queries in the server component for the page.
 
 You can see examples in `prefetch/page.tsx`, `server-only-fetch/page.tsx`, and `client-only-fetch/page.tsx`. It's also worth noting that you can pre-fetch data in the initial SSR render of client components too, but I digress.
+
+## n8n Workflows
+
+The `n8nProcedure` middleware now wraps `n8nClient.callWorkflow` and injects the authenticated Supabase user automatically. When calling `ctx.n8n.callWorkflow`, you only provide workflow specific options; the current user id and email are added for you.
+
