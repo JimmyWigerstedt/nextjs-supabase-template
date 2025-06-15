@@ -1,4 +1,5 @@
 import { exampleRouter } from "~/server/api/routers/example";
+import { n8nRouter } from "~/server/api/routers/n8n";
 import { createCallerFactory, createTRPCRouter } from "~/server/api/trpc";
 
 /**
@@ -8,6 +9,7 @@ import { createCallerFactory, createTRPCRouter } from "~/server/api/trpc";
  */
 export const appRouter = createTRPCRouter({
   example: exampleRouter,
+  n8n: n8nRouter,
 });
 
 // export type definition of API
