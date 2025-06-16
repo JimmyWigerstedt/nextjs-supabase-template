@@ -1,6 +1,6 @@
 export interface WorkflowCallInput {
   endpoint: string;
-  payload: unknown;
+  payload: Record<string, unknown>;
 }
 
 export interface WorkflowCallResult<T = unknown> {

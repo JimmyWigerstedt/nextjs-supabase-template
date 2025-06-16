@@ -3,7 +3,7 @@ import { env } from "~/env";
 
 export interface CallWorkflowOptions {
   endpoint: string;
-  payload: unknown;
+  payload: Record<string, unknown>;
   user?: { id: string; email?: string | null };
 }
 
