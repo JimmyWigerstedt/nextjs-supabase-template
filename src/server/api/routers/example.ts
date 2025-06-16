@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 import {
-  authroizedProcedure,
+  authorizedProcedure,
   createTRPCRouter,
   publicProcedure,
 } from "~/server/api/trpc";
@@ -17,7 +17,7 @@ export const exampleRouter = createTRPCRouter({
   hello2: publicProcedure.query(() => {
     return `Hellow world!`;
   }),
-  create: authroizedProcedure
+  create: authorizedProcedure
     .input(z.object({ name: z.string().min(1) }))
     .mutation(async ({ ctx, input }) => {
       // simulate a slow db call
@@ -30,7 +30,7 @@ export const exampleRouter = createTRPCRouter({
       });
     }),
 
-  getLatest: authroizedProcedure.query(({ ctx }) => {
+  getLatest: authorizedProcedure.query(({ ctx }) => {
     return ctx.db.post.findFirst({
       orderBy: { createdAt: "desc" },
     });
