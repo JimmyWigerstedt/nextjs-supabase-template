@@ -13,11 +13,7 @@ export const templateRouter = createTRPCRouter({
     .mutation(async ({ input, ctx }) => {
       const result = await ctx.n8nClient.callWorkflow({
         endpoint: "/webhook/your-n8n-endpoint",
-        payload: {
-          user_id: ctx.supabaseUser.id,
-          user_email: ctx.supabaseUser.email,
-          ...input,
-        },
+        payload: input,
       });
 
       return result;

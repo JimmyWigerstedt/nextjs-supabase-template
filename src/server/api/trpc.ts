@@ -125,7 +125,7 @@ export const publicProcedure = procedure;
 /**
  * A procedure that enforces that a Supabase user is present.
  */
-export const authroizedProcedure = procedure.use(async ({ ctx, next }) => {
+export const authorizedProcedure = procedure.use(async ({ ctx, next }) => {
   if (!ctx.supabaseUser) {
     throw new TRPCError({
       code: "UNAUTHORIZED",
