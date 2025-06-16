@@ -9,7 +9,13 @@ export const n8nProcedure = authorizedProcedure.use(async ({ ctx, next }) => {
     callWorkflow: (opts: Omit<CallWorkflowOptions, "user">) =>
       n8nClient.callWorkflow({
         ...opts,
-        user: { id: ctx.supabaseUser.id, email: ctx.supabaseUser.email },
+        // `authorizedProcedure` guarantees a `supabaseUser` is present, but the
+        // context type still allows `null`. Use a non-null assertion here to
+        // satisfy TypeScript while keeping the runtime check centralized.
+        user: {
+          id: ctx.supabaseUser!.id,
+          email: ctx.supabaseUser!.email,
+        },
       }),
   } as typeof n8nClient;
 
