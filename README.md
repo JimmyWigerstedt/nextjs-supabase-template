@@ -16,7 +16,7 @@ This is everything you need to start building an advanced app.
 
 ## Quick Start
 
-If you're familiar with these systems, here's your guide to getting going. The short of it is that you need an account with Supabase, and the rest will take care of itself. See `.env.example` to know what to add; you'll add this to your `.env` file. See the [Supabase Docs](https://supabase.com/docs/guides/getting-started/quickstarts/nextjs) for what specifically to do
+If you're familiar with these systems, here's your guide to getting going. The short of it is that you need an account with Supabase, and the rest will take care of itself. See `.env.example` to know what to add; you'll add this to your `.env` file. See the [Supabase Docs](https://supabase.com/docs/guides/getting-started/quickstarts/nextjs) for what specifically to do. For n8n workflows, read the [n8n integration guide](docs/n8n-integration.md) and configure `N8N_BASE_URL`, `N8N_WEBHOOK_SECRET`, and `N8N_TIMEOUT`. That guide covers how your authenticated user's details are automatically forwarded to n8n.
 
 Once you do this, you can start the development server with `npm run dev` and visit `localhost:3000` to get started.
 
@@ -34,7 +34,7 @@ Generally speaking, here's how things click together:
 
 - Next.js at its core. This is the web server framework that will return a React app.
 - tRPC as the server API. It provides type safety end-to-end at its core. We use this as the main way to talk to the database to make sure we get authorized queries.
-  - Note: this template does not take full advantage of Supabase's RLS (row-level security) as an auth strategy. It instead creates
+  - Note: this template does not take full advantage of Supabase's RLS (row-level security) as an auth strategy. It instead creates a middleware-based guard using `authorizedProcedure` to ensure requests come from authenticated users.
 - Supabase as the auth, database, and storage provider. Supabase auth was implemented via their most recent guide with Next.js [here](https://supabase.com/docs/guides/auth/server-side/nextjs?queryGroups=router&router=app).
 
 This template doesn't enforce an opinion on data fetching strategies, but you do have basically two options

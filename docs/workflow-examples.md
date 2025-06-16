@@ -10,6 +10,7 @@ clientApi.n8n.template.processTemplate.mutate({
   action: "process"
 });
 ```
+// The user's id and email are injected automatically by `n8nProcedure`.
 
 ## Example Output
 

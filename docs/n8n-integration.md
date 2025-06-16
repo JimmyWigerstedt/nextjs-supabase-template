@@ -21,6 +21,8 @@ N8N_TIMEOUT=30000
 5. Export the router and add it to `src/server/api/routers/n8n/index.ts`.
 6. Call it from the frontend using `clientApi.n8n.<workflow>.<procedure>.useMutation()`.
 
+When invoked via `n8nProcedure`, your Supabase user's `id` and `email` are automatically passed to the workflow under the `user` option. You only need to send your specific input data.
+
 ## Testing Workflows
 
 - Use the demo page at `/n8n-demo` as a reference.
