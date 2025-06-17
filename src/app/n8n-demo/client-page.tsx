@@ -72,6 +72,14 @@ export function N8nDemoClient() {
   const { data: debugInfo, refetch: refetchDebug } = 
     clientApi.internal.debugDatabase.useQuery();
 
+  const { 
+    data: connectionTestResult, 
+    refetch: testConnection, 
+    isLoading: isTestingConnection 
+  } = clientApi.internal.testConnection.useQuery(undefined, {
+    enabled: false, // Don't run automatically
+  });
+
   // Initialize SSE connection for live updates
   useEffect(() => {
     const connectSSE = () => {
@@ -315,16 +323,26 @@ export function N8nDemoClient() {
           <CardHeader>
             <CardTitle className="flex items-center justify-between">
               System Information
-              <Button 
-                variant="outline" 
-                size="sm"
-                onClick={() => {
-                  setShowDebug(!showDebug);
-                  void refetchDebug();
-                }}
-              >
-                {showDebug ? "Hide Debug" : "Show Debug"}
-              </Button>
+              <div className="flex space-x-2">
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => void testConnection()}
+                  disabled={isTestingConnection}
+                >
+                  {isTestingConnection ? "Testing..." : "Test DB Connection"}
+                </Button>
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => {
+                    setShowDebug(!showDebug);
+                    void refetchDebug();
+                  }}
+                >
+                  {showDebug ? "Hide Debug" : "Show Debug"}
+                </Button>
+              </div>
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -340,14 +358,42 @@ export function N8nDemoClient() {
               </div>
             </div>
             
+            {/* Connection Test Results */}
+            {connectionTestResult && (
+              <div className="mt-4 p-4 bg-blue-50 rounded-md">
+                <h4 className="font-semibold mb-2">Connection Test Results:</h4>
+                <div className="space-y-2 text-sm">
+                  <div><strong>Status:</strong> {connectionTestResult.success ? "✅ Success" : "❌ Failed"}</div>
+                  <div><strong>Database URL:</strong> {connectionTestResult.databaseUrl}</div>
+                  {connectionTestResult.success && connectionTestResult.connectionInfo && (
+                    <>
+                      <div><strong>Database:</strong> {(connectionTestResult.connectionInfo as { database_name?: string }).database_name}</div>
+                      <div><strong>User:</strong> {(connectionTestResult.connectionInfo as { database_user?: string }).database_user}</div>
+                      <div><strong>Server:</strong> {(connectionTestResult.connectionInfo as { server_address?: string }).server_address}:{(connectionTestResult.connectionInfo as { server_port?: string }).server_port}</div>
+                    </>
+                  )}
+                  {connectionTestResult.error && (
+                    <div className="text-red-600"><strong>Error:</strong> {connectionTestResult.error}</div>
+                  )}
+                </div>
+              </div>
+            )}
+            
             {showDebug && debugInfo && (
               <div className="mt-4 p-4 bg-gray-100 rounded-md">
                 <h4 className="font-semibold mb-2">Database Debug Information:</h4>
                 <div className="space-y-2 text-sm">
                   <div><strong>Connection:</strong> {debugInfo.connection}</div>
+                  <div><strong>Database URL:</strong> {debugInfo.databaseUrl}</div>
                   <div><strong>Table Status:</strong> {debugInfo.tableExists}</div>
                   <div><strong>Total Records:</strong> {debugInfo.userDataCount}</div>
                   <div><strong>Current User ID:</strong> {debugInfo.currentUserId}</div>
+                  {debugInfo.connectionInfo && (
+                    <>
+                      <div><strong>Database:</strong> {(debugInfo.connectionInfo as { database_name?: string }).database_name}</div>
+                      <div><strong>Server:</strong> {(debugInfo.connectionInfo as { server_address?: string }).server_address}:{(debugInfo.connectionInfo as { server_port?: string }).server_port}</div>
+                    </>
+                  )}
                   {debugInfo.error && (
                     <div className="text-red-600"><strong>Error:</strong> {debugInfo.error}</div>
                   )}

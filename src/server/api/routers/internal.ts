@@ -99,9 +99,11 @@ export const internalRouter = createTRPCRouter({
       return {
         connection: "✅ Connected",
         databaseUrl: env.INTERNAL_DATABASE_URL.replace(/\/\/[^:]+:[^@]+@/, '//***:***@'), // Mask credentials
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
         connectionInfo: dbInfo.rows[0] as Record<string, unknown>,
         tableExists: (tableCheck.rows[0] as { exists: boolean })?.exists ? "✅ Table exists" : "❌ Table missing",
         userDataCount: allData.rows.length,
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
         allUserData: allData.rows as UserData[],
         currentUserId: ctx.supabaseUser!.id,
       };
@@ -152,7 +154,8 @@ export const internalRouter = createTRPCRouter({
           throw new Error(`n8n request failed: ${response.status} ${response.statusText}`);
         }
 
-        const result = await response.json() as Record<string, unknown>;
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        const result: Record<string, unknown> = await response.json();
         console.info(`[n8n] Payload sent successfully:`, { payload, result });
         
         return {
@@ -181,6 +184,7 @@ export const internalRouter = createTRPCRouter({
         };
       }
       
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
       return result.rows[0] as UserData;
     } catch (error) {
       console.error('Failed to get user data:', error);
@@ -222,9 +226,11 @@ export const internalRouter = createTRPCRouter({
         );
         
         console.log(`[updateUserData] Update successful for user ${ctx.supabaseUser!.id}`, {
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
           result: result.rows[0]
         });
         
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
         return result.rows[0] as UserData;
       } catch (error) {
         console.error(`[updateUserData] Failed to update user data for ${ctx.supabaseUser!.id}:`, error);
@@ -251,9 +257,11 @@ export const internalRouter = createTRPCRouter({
           'SELECT * FROM "userData" WHERE "UID" = $1',
           [ctx.supabaseUser!.id]
         );
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
         return existing.rows[0] as UserData;
       }
       
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
       return result.rows[0] as UserData;
     } catch (error) {
       console.error('Failed to initialize user data:', error);

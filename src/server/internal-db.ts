@@ -6,9 +6,21 @@ const createInternalDbClient = () => {
     env.INTERNAL_DATABASE_URL.replace(/\/\/[^:]+:[^@]+@/, '//***:***@')
   );
   
+  // Determine SSL settings based on environment and URL
+  let sslConfig: boolean | { rejectUnauthorized: boolean } = false;
+  
+  if (env.NODE_ENV === "production") {
+    sslConfig = { rejectUnauthorized: false };
+  } else if (env.INTERNAL_DATABASE_URL.includes('railway') || env.INTERNAL_DATABASE_URL.includes('postgres.railway')) {
+    // Railway often requires SSL even in development
+    sslConfig = { rejectUnauthorized: false };
+  }
+  
+  console.log('[internal-db] SSL configuration:', sslConfig);
+  
   return new Pool({
     connectionString: env.INTERNAL_DATABASE_URL,
-    ssl: env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false,
+    ssl: sslConfig,
     max: 20,
     idleTimeoutMillis: 30000,
     connectionTimeoutMillis: 2000,
@@ -24,7 +36,7 @@ export const internalDb = globalForInternalDb.internalDb ?? createInternalDbClie
 if (env.NODE_ENV !== "production") globalForInternalDb.internalDb = internalDb;
 
 // Add connection event listeners for debugging
-internalDb.on('connect', (client) => {
+internalDb.on('connect', (_client) => {
   console.log('[internal-db] Client connected to database');
 });
 
