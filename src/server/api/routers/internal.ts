@@ -2,6 +2,15 @@ import { z } from "zod";
 import { createTRPCRouter, authorizedProcedure } from "~/server/api/trpc";
 import { internalDb } from "~/server/internal-db";
 
+// Type for user data from database
+type UserData = {
+  UID: string;
+  test1: string;
+  test2: string;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
 export const internalRouter = createTRPCRouter({
   getUserData: authorizedProcedure.query(async ({ ctx }) => {
     const client = await internalDb.connect();
@@ -19,7 +28,7 @@ export const internalRouter = createTRPCRouter({
         };
       }
       
-      return result.rows[0];
+      return result.rows[0] as UserData;
     } catch (error) {
       console.error('Failed to get user data:', error);
       throw new Error('Failed to retrieve user data');
@@ -54,7 +63,7 @@ export const internalRouter = createTRPCRouter({
           ]
         );
         
-        return result.rows[0];
+        return result.rows[0] as UserData;
       } catch (error) {
         console.error('Failed to update user data:', error);
         throw new Error('Failed to update user data');
@@ -80,10 +89,10 @@ export const internalRouter = createTRPCRouter({
           'SELECT * FROM "userData" WHERE "UID" = $1',
           [ctx.supabaseUser!.id]
         );
-        return existing.rows[0];
+        return existing.rows[0] as UserData;
       }
       
-      return result.rows[0];
+      return result.rows[0] as UserData;
     } catch (error) {
       console.error('Failed to initialize user data:', error);
       throw new Error('Failed to initialize user data');

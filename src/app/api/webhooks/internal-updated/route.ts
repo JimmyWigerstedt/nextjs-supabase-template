@@ -1,4 +1,5 @@
-import { NextRequest, NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
+import { NextResponse } from "next/server";
 import { env } from "~/env";
 import { internalDb } from "~/server/internal-db";
 
@@ -31,7 +32,11 @@ export async function POST(request: NextRequest) {
     }
     
     // Parse webhook payload
-    const body = await request.json();
+    const body = await request.json() as {
+      user_id: string;
+      updatedFields: string[];
+      newValues?: { test1?: string; test2?: string };
+    };
     const { user_id, updatedFields, newValues } = body;
     
     if (!user_id || !Array.isArray(updatedFields)) {
@@ -42,10 +47,10 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    console.info(`${LOG_PREFIX} Processing update for user ${user_id}`, {
-      updatedFields,
-      newValues,
-    });
+            console.info(`${LOG_PREFIX} Processing update for user ${user_id}`, {
+          updatedFields,
+          newValues: newValues ?? {},
+        });
     
     // Update the database with new values (simulating n8n updating data)
     if (newValues && Object.keys(newValues).length > 0) {
@@ -91,19 +96,14 @@ export async function POST(request: NextRequest) {
     const userConnection = activeConnections.get(user_id);
     if (userConnection) {
       try {
-        // Send SSE event to the user's connection
-        const eventData = JSON.stringify({
-          type: "userData-updated",
-          updatedFields,
-          timestamp: new Date().toISOString(),
-        });
+        // Note: SSE event would be sent here in a more robust implementation
         
         // Note: This is a simplified approach. In production, you'd want to use
         // a more robust system like Redis pub/sub or a proper real-time service
         console.info(`${LOG_PREFIX} Notifying user ${user_id} of updates`);
         
         // For now, we'll store the update and let the SSE endpoint handle it
-        global.pendingUpdates = global.pendingUpdates || new Map();
+        global.pendingUpdates = global.pendingUpdates ?? new Map();
         global.pendingUpdates.set(user_id, {
           updatedFields,
           timestamp: new Date().toISOString(),

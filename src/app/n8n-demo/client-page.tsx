@@ -35,7 +35,7 @@ export function N8nDemoClient() {
 
   const { mutate: updateUserData, isPending: isUpdating } = 
     clientApi.internal.updateUserData.useMutation({
-      onSuccess: (data) => {
+      onSuccess: (_data) => {
         toast.success("Data updated successfully!");
         void refetchUserData();
         setTest1Input("");
@@ -69,17 +69,21 @@ export function N8nDemoClient() {
           setIsConnected(true);
         };
 
-        eventSource.onmessage = (event) => {
+        eventSource.onmessage = (event: MessageEvent<string>) => {
           try {
-            const data = JSON.parse(event.data);
-            console.log("SSE message received:", data);
+            const data = JSON.parse(event.data) as {
+              type: string;
+              updatedFields?: string[];
+              timestamp?: string;
+            };
+            console.log("SSE message received:", JSON.stringify(data));
 
             switch (data.type) {
               case "connection-established":
                 toast.success("Live updates connected!");
                 break;
               case "userData-updated":
-                setLastUpdate(data.timestamp);
+                setLastUpdate(data.timestamp ?? new Date().toISOString());
                 // Highlight updated fields
                 if (data.updatedFields) {
                   setHighlightedFields(new Set(data.updatedFields));
@@ -90,7 +94,7 @@ export function N8nDemoClient() {
                 }
                 // Refetch data to get updated values
                 void refetchUserData();
-                toast.success(`Data updated: ${data.updatedFields?.join(", ")}`);
+                toast.success(`Data updated: ${data.updatedFields?.join(", ") ?? "fields"}`);
                 break;
               case "heartbeat":
                 // Keep connection alive
@@ -158,20 +162,20 @@ export function N8nDemoClient() {
           "Content-Type": "application/json",
                      "Authorization": `Bearer test-webhook-secret-for-demo`,
         },
-                 body: JSON.stringify({
-           user_id: userData?.UID,
-           updatedFields: [webhookField],
-           newValues: {
-             [webhookField]: webhookValue,
-           },
-         }),
+                         body: JSON.stringify({
+          user_id: (userData as { UID?: string })?.UID,
+          updatedFields: [webhookField],
+          newValues: {
+            [webhookField]: webhookValue,
+          },
+        }),
       });
 
       if (response.ok) {
         toast.success("Webhook simulation triggered!");
         setWebhookValue("");
       } else {
-        const errorData = await response.json();
+        const errorData = await response.json() as { error: string };
         toast.error(`Webhook failed: ${errorData.error}`);
       }
     } catch (error) {
@@ -258,14 +262,14 @@ export function N8nDemoClient() {
                   <div className="space-y-2">
                     <Label>Test Field 1 (Current Value)</Label>
                     <div className={`p-3 border rounded-md bg-muted ${getFieldHighlight('test1')}`}>
-                      {userData?.test1 || "(empty)"}
+                      {(userData as { test1?: string })?.test1 ?? "(empty)"}
                     </div>
                   </div>
                   
                   <div className="space-y-2">
                     <Label>Test Field 2 (Current Value)</Label>
                     <div className={`p-3 border rounded-md bg-muted ${getFieldHighlight('test2')}`}>
-                      {userData?.test2 || "(empty)"}
+                      {(userData as { test2?: string })?.test2 ?? "(empty)"}
                     </div>
                   </div>
                   
@@ -320,14 +324,14 @@ export function N8nDemoClient() {
                 <Button 
                   onClick={handleWebhookSimulation}
                   className="w-full"
-                  disabled={!userData?.UID}
+                  disabled={!(userData as { UID?: string })?.UID}
                 >
                   Simulate n8n Update
                 </Button>
               </div>
             </div>
             
-            {!userData?.UID && (
+            {!(userData as { UID?: string })?.UID && (
               <p className="text-sm text-yellow-600">
                 Initialize user data first to enable webhook simulation
               </p>
@@ -343,7 +347,7 @@ export function N8nDemoClient() {
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
               <div>
-                <strong>User ID:</strong> {userData?.UID || "Not initialized"}
+                <strong>User ID:</strong> {(userData as { UID?: string })?.UID ?? "Not initialized"}
               </div>
               <div>
                 <strong>Connection Status:</strong> {isConnected ? "Connected" : "Disconnected"}
