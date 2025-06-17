@@ -13,6 +13,63 @@ type UserData = {
 };
 
 export const internalRouter = createTRPCRouter({
+  testConnection: authorizedProcedure.query(async () => {
+    console.log('[testConnection] Testing database connection...');
+    let client;
+    try {
+      client = await internalDb.connect();
+      console.log('[testConnection] Successfully connected to database');
+      
+      // Test basic connectivity
+      const timeResult = await client.query('SELECT NOW() as current_time');
+      console.log('[testConnection] Time query successful:', timeResult.rows[0]);
+      
+      // Get detailed database info
+      const dbInfo = await client.query(`
+        SELECT 
+          current_database() as database_name,
+          current_user as database_user,
+          version() as postgres_version,
+          inet_server_addr() as server_address,
+          inet_server_port() as server_port
+      `);
+      console.log('[testConnection] Database info:', dbInfo.rows[0]);
+      
+      // Check if userData table exists and get its structure
+      const tableInfo = await client.query(`
+        SELECT 
+          table_name,
+          column_name,
+          data_type,
+          is_nullable
+        FROM information_schema.columns 
+        WHERE table_name = 'userData'
+        ORDER BY ordinal_position
+      `);
+      console.log('[testConnection] Table structure:', tableInfo.rows);
+      
+      return {
+        success: true,
+        connectionInfo: dbInfo.rows[0] as Record<string, unknown>,
+        tableStructure: tableInfo.rows as Record<string, unknown>[],
+        testTime: timeResult.rows[0] as Record<string, unknown>,
+        databaseUrl: env.INTERNAL_DATABASE_URL.replace(/\/\/[^:]+:[^@]+@/, '//***:***@'),
+      };
+    } catch (error) {
+      console.error('[testConnection] Database connection failed:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+        databaseUrl: env.INTERNAL_DATABASE_URL.replace(/\/\/[^:]+:[^@]+@/, '//***:***@'),
+      };
+    } finally {
+      if (client) {
+        client.release();
+        console.log('[testConnection] Database client released');
+      }
+    }
+  }),
+
   debugDatabase: authorizedProcedure.query(async ({ ctx }) => {
     const client = await internalDb.connect();
     try {
