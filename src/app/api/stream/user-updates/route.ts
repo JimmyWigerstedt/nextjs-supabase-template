@@ -1,18 +1,6 @@
 import type { NextRequest } from "next/server";
 import { supabaseServer } from "~/util/supabase/server";
-
-// Store active SSE connections
-const activeConnections = new Map<string, ReadableStreamDefaultController>();
-
-// Declare global types for pending updates
-declare global {
-  // eslint-disable-next-line no-var
-  var pendingUpdates: Map<string, { 
-    updatedFields: string[]; 
-    fetchedValues: Record<string, string>;
-    timestamp: string;
-  }> | undefined;
-}
+import { getActiveSSEConnections, getPendingUpdates } from "~/lib/sse-utils";
 
 export async function GET(request: NextRequest) {
   const LOG_PREFIX = "[sse:user-updates]";
@@ -33,7 +21,8 @@ export async function GET(request: NextRequest) {
     // Create SSE stream
     const stream = new ReadableStream({
       start(controller) {
-        // Store connection for this user
+        // Store connection for this user in global map
+        const activeConnections = getActiveSSEConnections();
         activeConnections.set(user.id, controller);
         
         // Send initial connection confirmation
@@ -45,9 +34,10 @@ export async function GET(request: NextRequest) {
         
         controller.enqueue(new TextEncoder().encode(initialMessage));
         
-        // Check for pending updates
-        if (global.pendingUpdates?.has(user.id)) {
-          const pendingUpdate = global.pendingUpdates.get(user.id);
+        // Check for pending updates and send them immediately
+        const pendingUpdates = getPendingUpdates();
+        if (pendingUpdates.has(user.id)) {
+          const pendingUpdate = pendingUpdates.get(user.id);
           if (pendingUpdate) {
             const updateMessage = `data: ${JSON.stringify({
               type: "userData-updated",
@@ -57,9 +47,10 @@ export async function GET(request: NextRequest) {
             })}\n\n`;
             
             controller.enqueue(new TextEncoder().encode(updateMessage));
+            console.info(`${LOG_PREFIX} Sent pending update to user ${user.id}`);
             
             // Clear the pending update
-            global.pendingUpdates.delete(user.id);
+            pendingUpdates.delete(user.id);
           }
         }
         

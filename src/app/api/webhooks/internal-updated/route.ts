@@ -2,19 +2,7 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { env } from "~/env";
 import { internalDb } from "~/server/internal-db";
-
-// Store active SSE connections for live updates
-const activeConnections = new Map<string, Response>();
-
-// Declare global types for pending updates
-declare global {
-  // eslint-disable-next-line no-var
-  var pendingUpdates: Map<string, { 
-    updatedFields: string[]; 
-    fetchedValues: Record<string, string>;
-    timestamp: string;
-  }> | undefined;
-}
+import { sendSSEUpdateToUser, getPendingUpdates } from "~/lib/sse-utils";
 
 export async function POST(request: NextRequest) {
   const LOG_PREFIX = "[webhook:internal-updated]";
@@ -51,10 +39,10 @@ export async function POST(request: NextRequest) {
       );
     }
     
-            console.info(`${LOG_PREFIX} Processing update for user ${user_id}`, {
-          updatedFields,
-          newValues: newValues ?? {},
-        });
+    console.info(`${LOG_PREFIX} Processing update for user ${user_id}`, {
+      updatedFields,
+      newValues: newValues ?? {},
+    });
     
     // Fetch current values from database (n8n already updated the database)
     const fetchedValues: Record<string, string> = {};
@@ -86,35 +74,30 @@ export async function POST(request: NextRequest) {
       // Continue processing even if DB fetch fails
     }
     
-    // Trigger live update for the specific user if they have an active connection
-    const userConnection = activeConnections.get(user_id);
-    if (userConnection) {
-      try {
-        // Note: SSE event would be sent here in a more robust implementation
-        
-        // Note: This is a simplified approach. In production, you'd want to use
-        // a more robust system like Redis pub/sub or a proper real-time service
-        console.info(`${LOG_PREFIX} Notifying user ${user_id} of updates`);
-        
-        // Store the fetched values for SSE endpoint
-        global.pendingUpdates = global.pendingUpdates ?? new Map();
-        global.pendingUpdates.set(user_id, {
-          updatedFields,
-          fetchedValues,
-          timestamp: new Date().toISOString(),
-        });
-        
-      } catch (error) {
-        console.error(`${LOG_PREFIX} Failed to notify user ${user_id}:`, error);
-      }
+    // Prepare update data
+    const updateData = {
+      updatedFields,
+      fetchedValues,
+      timestamp: new Date().toISOString(),
+    };
+    
+    // Try to send real-time update immediately
+    const sentRealTime = sendSSEUpdateToUser(user_id, updateData);
+    
+    if (!sentRealTime) {
+      // If no active connection, store as pending update
+      console.info(`${LOG_PREFIX} No active SSE connection, storing as pending update for user ${user_id}`);
+      const pendingUpdates = getPendingUpdates();
+      pendingUpdates.set(user_id, updateData);
     } else {
-      console.info(`${LOG_PREFIX} No active connection for user ${user_id}`);
+      console.info(`${LOG_PREFIX} Real-time update sent successfully to user ${user_id}`);
     }
     
     return NextResponse.json({
       success: true,
       message: `Update processed for user ${user_id}`,
       updatedFields,
+      sentRealTime,
     });
     
   } catch (error) {
