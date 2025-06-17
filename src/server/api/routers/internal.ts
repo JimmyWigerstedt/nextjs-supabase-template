@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { createTRPCRouter, authorizedProcedure } from "~/server/api/trpc";
 import { internalDb } from "~/server/internal-db";
+import { env } from "~/env";
 
 // Type for user data from database
 type UserData = {
@@ -12,6 +13,89 @@ type UserData = {
 };
 
 export const internalRouter = createTRPCRouter({
+  debugDatabase: authorizedProcedure.query(async ({ ctx }) => {
+    const client = await internalDb.connect();
+    try {
+      // Test basic connection
+      await client.query('SELECT NOW()');
+      
+      // Check if table exists
+      const tableCheck = await client.query(`
+        SELECT EXISTS (
+          SELECT FROM information_schema.tables 
+          WHERE table_name = 'userData'
+        );
+      `);
+      
+      // Get all user data for debugging
+      const allData = await client.query('SELECT * FROM "userData"');
+      
+      return {
+        connection: "✅ Connected",
+        tableExists: (tableCheck.rows[0] as { exists: boolean })?.exists ? "✅ Table exists" : "❌ Table missing",
+        userDataCount: allData.rows.length,
+        allUserData: allData.rows as UserData[],
+        currentUserId: ctx.supabaseUser!.id,
+      };
+    } catch (error) {
+      console.error('Database debug failed:', error);
+      return {
+        connection: "❌ Failed",
+        error: error instanceof Error ? error.message : String(error),
+      };
+    } finally {
+      client.release();
+    }
+  }),
+
+  sendToN8n: authorizedProcedure
+    .input(
+      z.object({
+        n8nDemo: z.string(),
+        n8nDemo2: z.string(),
+      })
+    )
+    .mutation(async ({ input, ctx }) => {
+      try {
+        // Use the existing n8n client infrastructure
+        const payload = {
+          user_id: ctx.supabaseUser!.id,
+          user_email: ctx.supabaseUser!.email,
+          data: {
+            n8nDemo: input.n8nDemo,
+            n8nDemo2: input.n8nDemo2,
+          },
+          action: "process",
+        };
+
+                 // Send to n8n using the auth header specified by the user
+         const response = await fetch(`${env.N8N_BASE_URL}/webhook/your-n8n-endpoint`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Auth": "x-webhook-secret",
+            "x-webhook-secret": "ContentDripAuth!",
+          },
+          body: JSON.stringify(payload),
+        });
+
+        if (!response.ok) {
+          throw new Error(`n8n request failed: ${response.status} ${response.statusText}`);
+        }
+
+        const result = await response.json() as Record<string, unknown>;
+        console.info(`[n8n] Payload sent successfully:`, { payload, result });
+        
+        return {
+          success: true,
+          message: "Payload sent to n8n successfully",
+          data: result,
+        };
+      } catch (error) {
+        console.error('Failed to send to n8n:', error);
+        throw new Error(`Failed to send to n8n: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }),
   getUserData: authorizedProcedure.query(async ({ ctx }) => {
     const client = await internalDb.connect();
     try {

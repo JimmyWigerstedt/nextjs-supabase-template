@@ -19,11 +19,10 @@ import { toast } from "sonner";
 export function N8nDemoClient() {
   const [test1Input, setTest1Input] = useState("");
   const [test2Input, setTest2Input] = useState("");
-  const [webhookField, setWebhookField] = useState<"test1" | "test2">("test1");
-  const [webhookValue, setWebhookValue] = useState("");
   const [isConnected, setIsConnected] = useState(false);
   const [lastUpdate, setLastUpdate] = useState<string | null>(null);
   const [highlightedFields, setHighlightedFields] = useState<Set<string>>(new Set());
+  const [showDebug, setShowDebug] = useState(false);
   const eventSourceRef = useRef<EventSource | null>(null);
 
   // tRPC queries and mutations
@@ -57,6 +56,22 @@ export function N8nDemoClient() {
       },
     });
 
+  const { mutate: sendToN8n, isPending: isSendingToN8n } = 
+    clientApi.internal.sendToN8n.useMutation({
+      onSuccess: () => {
+        toast.success("Payload sent to n8n successfully! Waiting for webhook response...");
+        // Clear inputs after successful send
+        setTest1Input("");
+        setTest2Input("");
+      },
+      onError: (error) => {
+        toast.error(`n8n send failed: ${error.message}`);
+      },
+    });
+
+  const { data: debugInfo, refetch: refetchDebug } = 
+    clientApi.internal.debugDatabase.useQuery();
+
   // Initialize SSE connection for live updates
   useEffect(() => {
     const connectSSE = () => {
@@ -74,6 +89,7 @@ export function N8nDemoClient() {
             const data = JSON.parse(event.data) as {
               type: string;
               updatedFields?: string[];
+              fetchedValues?: Record<string, string>;
               timestamp?: string;
             };
             console.log("SSE message received:", JSON.stringify(data));
@@ -92,9 +108,14 @@ export function N8nDemoClient() {
                     setHighlightedFields(new Set());
                   }, 3000);
                 }
-                // Refetch data to get updated values
+                // Refetch data to get updated values (the webhook fetched the latest from database)
                 void refetchUserData();
-                toast.success(`Data updated: ${data.updatedFields?.join(", ") ?? "fields"}`);
+                
+                // Show the actual values that were fetched
+                const updatedValues = Object.entries(data.fetchedValues ?? {})
+                  .map(([field, value]) => `${field}: "${value}"`)
+                  .join(", ");
+                toast.success(`n8n webhook received! Updated: ${updatedValues || "fields"}`);
                 break;
               case "heartbeat":
                 // Keep connection alive
@@ -149,39 +170,16 @@ export function N8nDemoClient() {
     updateUserData(updates);
   };
 
-  const handleWebhookSimulation = async () => {
-    if (!webhookValue.trim()) {
-      toast.error("Please enter a value for the webhook simulation");
+  const handleSendToN8n = () => {
+    if (!test1Input.trim() && !test2Input.trim()) {
+      toast.error("Please enter some data to send to n8n");
       return;
     }
 
-    try {
-      const response = await fetch("/api/webhooks/internal-updated", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-                     "Authorization": `Bearer test-webhook-secret-for-demo`,
-        },
-                         body: JSON.stringify({
-          user_id: (userData as { UID?: string })?.UID,
-          updatedFields: [webhookField],
-          newValues: {
-            [webhookField]: webhookValue,
-          },
-        }),
-      });
-
-      if (response.ok) {
-        toast.success("Webhook simulation triggered!");
-        setWebhookValue("");
-      } else {
-        const errorData = await response.json() as { error: string };
-        toast.error(`Webhook failed: ${errorData.error}`);
-      }
-    } catch (error) {
-      console.error("Webhook simulation failed:", error);
-      toast.error("Failed to trigger webhook simulation");
-    }
+    sendToN8n({
+      n8nDemo: test1Input.trim(),
+      n8nDemo2: test2Input.trim(),
+    });
   };
 
   const getFieldHighlight = (fieldName: string) => {
@@ -284,65 +282,50 @@ export function N8nDemoClient() {
           </Card>
         </div>
 
-        {/* Webhook Testing Section */}
+        {/* n8n Testing Section */}
         <Card>
           <CardHeader>
-            <CardTitle>Webhook Testing Section</CardTitle>
+            <CardTitle>Send to n8n Section</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-sm text-muted-foreground">
-              This section simulates n8n completing a workflow and sending a webhook to update the UI.
-              In production, n8n would trigger this automatically after processing data.
+              This section sends data to n8n for processing. After n8n completes its workflow,
+              it will send a webhook back to update the UI with the processed results.
             </p>
             
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="webhook-field">Field to Update</Label>
-                <select
-                  id="webhook-field"
-                  value={webhookField}
-                  onChange={(e) => setWebhookField(e.target.value as "test1" | "test2")}
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                >
-                  <option value="test1">Test Field 1</option>
-                  <option value="test2">Test Field 2</option>
-                </select>
-              </div>
+            <div className="space-y-4">
+              <Button 
+                onClick={handleSendToN8n}
+                className="w-full"
+                disabled={isSendingToN8n || isUpdating}
+              >
+                {isSendingToN8n ? "Sending to n8n..." : "Send Data to n8n"}
+              </Button>
               
-              <div className="space-y-2">
-                <Label htmlFor="webhook-value">New Value</Label>
-                <Input
-                  id="webhook-value"
-                  value={webhookValue}
-                  onChange={(e) => setWebhookValue(e.target.value)}
-                  placeholder="Enter new value"
-                />
-              </div>
-              
-              <div className="space-y-2">
-                <Label>&nbsp;</Label>
-                <Button 
-                  onClick={handleWebhookSimulation}
-                  className="w-full"
-                  disabled={!(userData as { UID?: string })?.UID}
-                >
-                  Simulate n8n Update
-                </Button>
-              </div>
-            </div>
-            
-            {!(userData as { UID?: string })?.UID && (
-              <p className="text-sm text-yellow-600">
-                Initialize user data first to enable webhook simulation
+              <p className="text-sm text-muted-foreground">
+                This will send the current input values to n8n. n8n will process them and send a webhook 
+                back to refresh the display section.
               </p>
-            )}
+            </div>
           </CardContent>
         </Card>
 
         {/* System Information */}
         <Card>
           <CardHeader>
-            <CardTitle>System Information</CardTitle>
+            <CardTitle className="flex items-center justify-between">
+              System Information
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={() => {
+                  setShowDebug(!showDebug);
+                  void refetchDebug();
+                }}
+              >
+                {showDebug ? "Hide Debug" : "Show Debug"}
+              </Button>
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
@@ -356,6 +339,29 @@ export function N8nDemoClient() {
                 <strong>Last Activity:</strong> {lastUpdate ? new Date(lastUpdate).toLocaleTimeString() : "None"}
               </div>
             </div>
+            
+            {showDebug && debugInfo && (
+              <div className="mt-4 p-4 bg-gray-100 rounded-md">
+                <h4 className="font-semibold mb-2">Database Debug Information:</h4>
+                <div className="space-y-2 text-sm">
+                  <div><strong>Connection:</strong> {debugInfo.connection}</div>
+                  <div><strong>Table Status:</strong> {debugInfo.tableExists}</div>
+                  <div><strong>Total Records:</strong> {debugInfo.userDataCount}</div>
+                  <div><strong>Current User ID:</strong> {debugInfo.currentUserId}</div>
+                  {debugInfo.error && (
+                    <div className="text-red-600"><strong>Error:</strong> {debugInfo.error}</div>
+                  )}
+                  {debugInfo.allUserData && debugInfo.allUserData.length > 0 && (
+                    <div>
+                      <strong>All Data:</strong>
+                      <pre className="mt-1 text-xs bg-white p-2 rounded overflow-auto max-h-32">
+                        {JSON.stringify(debugInfo.allUserData, null, 2)}
+                      </pre>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>

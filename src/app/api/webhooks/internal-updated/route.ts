@@ -9,7 +9,11 @@ const activeConnections = new Map<string, Response>();
 // Declare global types for pending updates
 declare global {
   // eslint-disable-next-line no-var
-  var pendingUpdates: Map<string, { updatedFields: string[]; timestamp: string }> | undefined;
+  var pendingUpdates: Map<string, { 
+    updatedFields: string[]; 
+    fetchedValues: Record<string, string>;
+    timestamp: string;
+  }> | undefined;
 }
 
 export async function POST(request: NextRequest) {
@@ -52,44 +56,34 @@ export async function POST(request: NextRequest) {
           newValues: newValues ?? {},
         });
     
-    // Update the database with new values (simulating n8n updating data)
-    if (newValues && Object.keys(newValues).length > 0) {
+    // Fetch current values from database (n8n already updated the database)
+    const fetchedValues: Record<string, string> = {};
+    try {
+      const client = await internalDb.connect();
       try {
-        const client = await internalDb.connect();
-        try {
-          const updateFields = [];
-          const updateValues = [];
-          let paramIndex = 2; // Start from $2 since $1 is user_id
-          
-          if (newValues.test1 !== undefined) {
-            updateFields.push(`"test1" = $${paramIndex}`);
-            updateValues.push(newValues.test1);
-            paramIndex++;
+        const result = await client.query(
+          'SELECT * FROM "userData" WHERE "UID" = $1',
+          [user_id]
+        );
+        
+        if (result.rows.length > 0) {
+          const userData = result.rows[0] as { test1?: string; test2?: string };
+          // Extract only the requested fields
+          for (const field of updatedFields) {
+            if (field === 'test1' || field === 'test2') {
+              fetchedValues[field] = userData[field] ?? '';
+            }
           }
-          
-          if (newValues.test2 !== undefined) {
-            updateFields.push(`"test2" = $${paramIndex}`);
-            updateValues.push(newValues.test2);
-            paramIndex++;
-          }
-          
-          if (updateFields.length > 0) {
-            const query = `
-              UPDATE "userData" 
-              SET ${updateFields.join(', ')}, "updatedAt" = CURRENT_TIMESTAMP
-              WHERE "UID" = $1
-            `;
-            
-            await client.query(query, [user_id, ...updateValues]);
-            console.info(`${LOG_PREFIX} Database updated for user ${user_id}`);
-          }
-        } finally {
-          client.release();
+          console.info(`${LOG_PREFIX} Fetched values for user ${user_id}:`, fetchedValues);
+        } else {
+          console.warn(`${LOG_PREFIX} No user data found for user ${user_id}`);
         }
-      } catch (dbError) {
-        console.error(`${LOG_PREFIX} Database update failed:`, dbError);
-        // Continue processing even if DB update fails
+      } finally {
+        client.release();
       }
+    } catch (dbError) {
+      console.error(`${LOG_PREFIX} Database fetch failed:`, dbError);
+      // Continue processing even if DB fetch fails
     }
     
     // Trigger live update for the specific user if they have an active connection
@@ -102,10 +96,11 @@ export async function POST(request: NextRequest) {
         // a more robust system like Redis pub/sub or a proper real-time service
         console.info(`${LOG_PREFIX} Notifying user ${user_id} of updates`);
         
-        // For now, we'll store the update and let the SSE endpoint handle it
+        // Store the fetched values for SSE endpoint
         global.pendingUpdates = global.pendingUpdates ?? new Map();
         global.pendingUpdates.set(user_id, {
           updatedFields,
+          fetchedValues,
           timestamp: new Date().toISOString(),
         });
         

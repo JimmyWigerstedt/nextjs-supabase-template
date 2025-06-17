@@ -7,7 +7,11 @@ const activeConnections = new Map<string, ReadableStreamDefaultController>();
 // Declare global types for pending updates
 declare global {
   // eslint-disable-next-line no-var
-  var pendingUpdates: Map<string, { updatedFields: string[]; timestamp: string }> | undefined;
+  var pendingUpdates: Map<string, { 
+    updatedFields: string[]; 
+    fetchedValues: Record<string, string>;
+    timestamp: string;
+  }> | undefined;
 }
 
 export async function GET(request: NextRequest) {
@@ -47,7 +51,9 @@ export async function GET(request: NextRequest) {
           if (pendingUpdate) {
             const updateMessage = `data: ${JSON.stringify({
               type: "userData-updated",
-              ...pendingUpdate,
+              updatedFields: pendingUpdate.updatedFields,
+              fetchedValues: pendingUpdate.fetchedValues,
+              timestamp: pendingUpdate.timestamp,
             })}\n\n`;
             
             controller.enqueue(new TextEncoder().encode(updateMessage));
