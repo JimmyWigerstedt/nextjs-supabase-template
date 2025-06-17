@@ -19,6 +19,15 @@ export const internalRouter = createTRPCRouter({
       // Test basic connection
       await client.query('SELECT NOW()');
       
+      // Get database connection info
+      const dbInfo = await client.query(`
+        SELECT 
+          current_database() as database_name,
+          current_user as database_user,
+          inet_server_addr() as server_address,
+          inet_server_port() as server_port
+      `);
+      
       // Check if table exists
       const tableCheck = await client.query(`
         SELECT EXISTS (
@@ -32,6 +41,8 @@ export const internalRouter = createTRPCRouter({
       
       return {
         connection: "✅ Connected",
+        databaseUrl: env.INTERNAL_DATABASE_URL.replace(/\/\/[^:]+:[^@]+@/, '//***:***@'), // Mask credentials
+        connectionInfo: dbInfo.rows[0] as Record<string, unknown>,
         tableExists: (tableCheck.rows[0] as { exists: boolean })?.exists ? "✅ Table exists" : "❌ Table missing",
         userDataCount: allData.rows.length,
         allUserData: allData.rows as UserData[],
@@ -42,6 +53,7 @@ export const internalRouter = createTRPCRouter({
       return {
         connection: "❌ Failed",
         error: error instanceof Error ? error.message : String(error),
+        databaseUrl: env.INTERNAL_DATABASE_URL.replace(/\/\/[^:]+:[^@]+@/, '//***:***@'), // Mask credentials
       };
     } finally {
       client.release();
@@ -131,6 +143,11 @@ export const internalRouter = createTRPCRouter({
     .mutation(async ({ input, ctx }) => {
       const client = await internalDb.connect();
       try {
+        console.log(`[updateUserData] Starting update for user ${ctx.supabaseUser!.id}`, {
+          input,
+          databaseUrl: env.INTERNAL_DATABASE_URL.replace(/\/\/[^:]+:[^@]+@/, '//***:***@')
+        });
+        
         const result = await client.query(
           `INSERT INTO "userData" ("UID", "test1", "test2", "updatedAt") 
            VALUES ($1, $2, $3, CURRENT_TIMESTAMP)
@@ -147,9 +164,13 @@ export const internalRouter = createTRPCRouter({
           ]
         );
         
+        console.log(`[updateUserData] Update successful for user ${ctx.supabaseUser!.id}`, {
+          result: result.rows[0]
+        });
+        
         return result.rows[0] as UserData;
       } catch (error) {
-        console.error('Failed to update user data:', error);
+        console.error(`[updateUserData] Failed to update user data for ${ctx.supabaseUser!.id}:`, error);
         throw new Error('Failed to update user data');
       } finally {
         client.release();
