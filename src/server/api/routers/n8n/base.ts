@@ -1,7 +1,6 @@
-import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { authorizedProcedure } from "~/server/api/trpc";
-import { n8nClient, CallWorkflowOptions } from "~/lib/n8n-client";
+import { n8nClient, type CallWorkflowOptions } from "~/lib/n8n-client";
 
 export const n8nProcedure = authorizedProcedure.use(async ({ ctx, next }) => {
   const client = {

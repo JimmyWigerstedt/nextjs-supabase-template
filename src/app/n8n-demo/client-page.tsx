@@ -1,44 +1,416 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { clientApi } from "~/trpc/react";
 import { Button } from "~/components/ui/button";
+import { Input } from "~/components/ui/input";
+import { Label } from "~/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { toast } from "sonner";
 
-export function N8nDemoClient() {
-  const [isProcessing, setIsProcessing] = useState(false);
+// UserData interface for type checking
+// interface UserData {
+//   UID: string;
+//   test1: string;
+//   test2: string;
+//   createdAt?: string;
+//   updatedAt?: string;
+// }
 
-  const { mutate: processWorkflow } = clientApi.n8n.template.processTemplate.useMutation({
-    onSuccess: () => {
-      toast.success("Workflow completed successfully!");
-      setIsProcessing(false);
-    },
-    onError: (error) => {
-      toast.error(`Workflow failed: ${error.message}`);
-      setIsProcessing(false);
-    },
+export function N8nDemoClient() {
+  const [test1Input, setTest1Input] = useState("");
+  const [test2Input, setTest2Input] = useState("");
+  const [isConnected, setIsConnected] = useState(false);
+  const [lastUpdate, setLastUpdate] = useState<string | null>(null);
+  const [highlightedFields, setHighlightedFields] = useState<Set<string>>(new Set());
+  const [showDebug, setShowDebug] = useState(false);
+  const eventSourceRef = useRef<EventSource | null>(null);
+
+  // tRPC queries and mutations
+  const {
+    data: userData,
+    refetch: refetchUserData,
+    isLoading: isLoadingData,
+  } = clientApi.internal.getUserData.useQuery();
+
+  const { mutate: updateUserData, isPending: isUpdating } = 
+    clientApi.internal.updateUserData.useMutation({
+      onSuccess: (_data) => {
+        toast.success("Data updated successfully!");
+        void refetchUserData();
+        setTest1Input("");
+        setTest2Input("");
+      },
+      onError: (error) => {
+        toast.error(`Error: ${error.message}`);
+      },
+    });
+
+  const { mutate: initializeUserData } = 
+    clientApi.internal.initializeUserData.useMutation({
+      onSuccess: () => {
+        toast.success("User data initialized!");
+        void refetchUserData();
+      },
+      onError: (error) => {
+        toast.error(`Initialization error: ${error.message}`);
+      },
+    });
+
+  const { mutate: sendToN8n, isPending: isSendingToN8n } = 
+    clientApi.internal.sendToN8n.useMutation({
+      onSuccess: () => {
+        toast.success("Payload sent to n8n successfully! Waiting for webhook response...");
+        // Clear inputs after successful send
+        setTest1Input("");
+        setTest2Input("");
+      },
+      onError: (error) => {
+        toast.error(`n8n send failed: ${error.message}`);
+      },
+    });
+
+  const { data: debugInfo, refetch: refetchDebug } = 
+    clientApi.internal.debugDatabase.useQuery();
+
+  const { 
+    data: connectionTestResult, 
+    refetch: testConnection, 
+    isLoading: isTestingConnection 
+  } = clientApi.internal.testConnection.useQuery(undefined, {
+    enabled: false, // Don't run automatically
   });
 
-  const handleProcessWorkflow = () => {
-    setIsProcessing(true);
-    processWorkflow({
-      data: { sample: "data" },
-      action: "process",
+  // Initialize SSE connection for live updates
+  useEffect(() => {
+    const connectSSE = () => {
+      try {
+        const eventSource = new EventSource("/api/stream/user-updates");
+        eventSourceRef.current = eventSource;
+
+        eventSource.onopen = () => {
+          console.log("SSE connection opened");
+          setIsConnected(true);
+        };
+
+        eventSource.onmessage = (event: MessageEvent<string>) => {
+          try {
+            const data = JSON.parse(event.data) as {
+              type: string;
+              updatedFields?: string[];
+              fetchedValues?: Record<string, string>;
+              timestamp?: string;
+            };
+            console.log("SSE message received:", JSON.stringify(data));
+
+            switch (data.type) {
+              case "connection-established":
+                toast.success("Live updates connected!");
+                break;
+              case "userData-updated":
+                setLastUpdate(data.timestamp ?? new Date().toISOString());
+                // Highlight updated fields
+                if (data.updatedFields) {
+                  setHighlightedFields(new Set(data.updatedFields));
+                  // Clear highlights after 3 seconds
+                  setTimeout(() => {
+                    setHighlightedFields(new Set());
+                  }, 3000);
+                }
+                // Refetch data to get updated values (the webhook fetched the latest from database)
+                void refetchUserData();
+                
+                // Show the actual values that were fetched
+                const updatedValues = Object.entries(data.fetchedValues ?? {})
+                  .map(([field, value]) => `${field}: "${value}"`)
+                  .join(", ");
+                toast.success(`n8n webhook received! Updated: ${updatedValues || "fields"}`);
+                break;
+              case "heartbeat":
+                // Keep connection alive
+                break;
+            }
+          } catch (error) {
+            console.error("Failed to parse SSE message:", error);
+          }
+        };
+
+        eventSource.onerror = (error) => {
+          console.error("SSE error:", error);
+          setIsConnected(false);
+          eventSource.close();
+          
+          // Reconnect after 5 seconds
+          setTimeout(connectSSE, 5000);
+        };
+      } catch (error) {
+        console.error("Failed to establish SSE connection:", error);
+        setIsConnected(false);
+      }
+    };
+
+    connectSSE();
+
+    // Cleanup on unmount
+    return () => {
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+      }
+    };
+  }, [refetchUserData]);
+
+  // Initialize user data on first load
+  useEffect(() => {
+    if (!userData && !isLoadingData) {
+      initializeUserData();
+    }
+  }, [userData, isLoadingData, initializeUserData]);
+
+  const handleUpdateData = () => {
+    const updates: { test1?: string; test2?: string } = {};
+    if (test1Input.trim()) updates.test1 = test1Input.trim();
+    if (test2Input.trim()) updates.test2 = test2Input.trim();
+
+    if (Object.keys(updates).length === 0) {
+      toast.error("Please enter at least one field to update");
+      return;
+    }
+
+    updateUserData(updates);
+  };
+
+  const handleSendToN8n = () => {
+    if (!test1Input.trim() && !test2Input.trim()) {
+      toast.error("Please enter some data to send to n8n");
+      return;
+    }
+
+    sendToN8n({
+      n8nDemo: test1Input.trim(),
+      n8nDemo2: test2Input.trim(),
     });
   };
 
+  const getFieldHighlight = (fieldName: string) => {
+    return highlightedFields.has(fieldName) 
+      ? "bg-green-100 border-green-300 transition-colors duration-300" 
+      : "";
+  };
+
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center">
-      <Card className="max-w-[400px]">
-        <CardHeader>
-          <CardTitle>n8n Workflow Demo</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Button onClick={handleProcessWorkflow} disabled={isProcessing} className="w-full">
-            {isProcessing ? "Processing..." : "Run n8n Workflow"}
-          </Button>
-        </CardContent>
-      </Card>
+    <div className="flex min-h-screen flex-col items-center justify-center p-4">
+      <div className="w-full max-w-4xl space-y-6">
+        
+        {/* Header */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center justify-between">
+              Enhanced n8n + Internal Database Demo
+              <div className="flex items-center space-x-2">
+                <div className={`w-3 h-3 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`} />
+                <span className="text-sm text-muted-foreground">
+                  {isConnected ? 'Live Updates Connected' : 'Disconnected'}
+                </span>
+              </div>
+            </CardTitle>
+          </CardHeader>
+        </Card>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          
+          {/* Data Input Section */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Data Input Section</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="test1-input">Test Field 1</Label>
+                <Input
+                  id="test1-input"
+                  value={test1Input}
+                  onChange={(e) => setTest1Input(e.target.value)}
+                  placeholder="Enter test1 value"
+                  disabled={isUpdating}
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="test2-input">Test Field 2</Label>
+                <Input
+                  id="test2-input"
+                  value={test2Input}
+                  onChange={(e) => setTest2Input(e.target.value)}
+                  placeholder="Enter test2 value"
+                  disabled={isUpdating}
+                />
+              </div>
+              
+              <Button 
+                onClick={handleUpdateData} 
+                disabled={isUpdating}
+                className="w-full"
+              >
+                {isUpdating ? "Updating..." : "Save Data to Internal Database"}
+              </Button>
+            </CardContent>
+          </Card>
+
+          {/* Data Display Section */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Current Database Values</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {isLoadingData ? (
+                <p className="text-muted-foreground">Loading data...</p>
+              ) : (
+                <>
+                  <div className="space-y-2">
+                    <Label>Test Field 1 (Current Value)</Label>
+                    <div className={`p-3 border rounded-md bg-muted ${getFieldHighlight('test1')}`}>
+                      {(userData as { test1?: string })?.test1 ?? "(empty)"}
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label>Test Field 2 (Current Value)</Label>
+                    <div className={`p-3 border rounded-md bg-muted ${getFieldHighlight('test2')}`}>
+                      {(userData as { test2?: string })?.test2 ?? "(empty)"}
+                    </div>
+                  </div>
+                  
+                  {lastUpdate && (
+                    <div className="text-sm text-muted-foreground">
+                      Last updated via webhook: {new Date(lastUpdate).toLocaleString()}
+                    </div>
+                  )}
+                </>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* n8n Testing Section */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Send to n8n Section</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              This section sends data to n8n for processing. After n8n completes its workflow,
+              it will send a webhook back to update the UI with the processed results.
+            </p>
+            
+            <div className="space-y-4">
+              <Button 
+                onClick={handleSendToN8n}
+                className="w-full"
+                disabled={isSendingToN8n || isUpdating}
+              >
+                {isSendingToN8n ? "Sending to n8n..." : "Send Data to n8n"}
+              </Button>
+              
+              <p className="text-sm text-muted-foreground">
+                This will send the current input values to n8n. n8n will process them and send a webhook 
+                back to refresh the display section.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* System Information */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center justify-between">
+              System Information
+              <div className="flex space-x-2">
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => void testConnection()}
+                  disabled={isTestingConnection}
+                >
+                  {isTestingConnection ? "Testing..." : "Test DB Connection"}
+                </Button>
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => {
+                    setShowDebug(!showDebug);
+                    void refetchDebug();
+                  }}
+                >
+                  {showDebug ? "Hide Debug" : "Show Debug"}
+                </Button>
+              </div>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+              <div>
+                <strong>User ID:</strong> {(userData as { UID?: string })?.UID ?? "Not initialized"}
+              </div>
+              <div>
+                <strong>Connection Status:</strong> {isConnected ? "Connected" : "Disconnected"}
+              </div>
+              <div>
+                <strong>Last Activity:</strong> {lastUpdate ? new Date(lastUpdate).toLocaleTimeString() : "None"}
+              </div>
+            </div>
+            
+            {/* Connection Test Results */}
+            {connectionTestResult && (
+              <div className="mt-4 p-4 bg-blue-50 rounded-md">
+                <h4 className="font-semibold mb-2">Connection Test Results:</h4>
+                <div className="space-y-2 text-sm">
+                  <div><strong>Status:</strong> {connectionTestResult.success ? "✅ Success" : "❌ Failed"}</div>
+                  <div><strong>Database URL:</strong> {connectionTestResult.databaseUrl}</div>
+                  {connectionTestResult.success && connectionTestResult.connectionInfo && (
+                    <>
+                      <div><strong>Database:</strong> {(connectionTestResult.connectionInfo as { database_name?: string }).database_name}</div>
+                      <div><strong>User:</strong> {(connectionTestResult.connectionInfo as { database_user?: string }).database_user}</div>
+                      <div><strong>Server:</strong> {(connectionTestResult.connectionInfo as { server_address?: string }).server_address}:{(connectionTestResult.connectionInfo as { server_port?: string }).server_port}</div>
+                    </>
+                  )}
+                  {connectionTestResult.error && (
+                    <div className="text-red-600"><strong>Error:</strong> {connectionTestResult.error}</div>
+                  )}
+                </div>
+              </div>
+            )}
+            
+            {showDebug && debugInfo && (
+              <div className="mt-4 p-4 bg-gray-100 rounded-md">
+                <h4 className="font-semibold mb-2">Database Debug Information:</h4>
+                <div className="space-y-2 text-sm">
+                  <div><strong>Connection:</strong> {debugInfo.connection}</div>
+                  <div><strong>Database URL:</strong> {debugInfo.databaseUrl}</div>
+                  <div><strong>Table Status:</strong> {debugInfo.tableExists}</div>
+                  <div><strong>Total Records:</strong> {debugInfo.userDataCount}</div>
+                  <div><strong>Current User ID:</strong> {debugInfo.currentUserId}</div>
+                  {debugInfo.connectionInfo && (
+                    <>
+                      <div><strong>Database:</strong> {(debugInfo.connectionInfo as { database_name?: string }).database_name}</div>
+                      <div><strong>Server:</strong> {(debugInfo.connectionInfo as { server_address?: string }).server_address}:{(debugInfo.connectionInfo as { server_port?: string }).server_port}</div>
+                    </>
+                  )}
+                  {debugInfo.error && (
+                    <div className="text-red-600"><strong>Error:</strong> {debugInfo.error}</div>
+                  )}
+                  {debugInfo.allUserData && debugInfo.allUserData.length > 0 && (
+                    <div>
+                      <strong>All Data:</strong>
+                      <pre className="mt-1 text-xs bg-white p-2 rounded overflow-auto max-h-32">
+                        {JSON.stringify(debugInfo.allUserData, null, 2)}
+                      </pre>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }

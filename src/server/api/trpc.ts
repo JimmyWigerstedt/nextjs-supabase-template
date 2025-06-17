@@ -11,6 +11,7 @@ import superjson from "superjson";
 import { ZodError } from "zod";
 
 import { db } from "~/server/db";
+import { internalDb } from "~/server/internal-db";
 import { supabaseServer } from "~/util/supabase/server";
 
 /**
@@ -35,6 +36,7 @@ export const createTRPCContext = async (opts: { headers: Headers }) => {
 
   return {
     db,
+    internalDb,
     supabaseUser,
     ...opts,
   };
