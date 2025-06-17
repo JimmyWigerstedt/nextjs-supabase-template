@@ -20,6 +20,7 @@ export const env = createEnv({
     N8N_BASE_URL: z.string().url(),
     N8N_WEBHOOK_SECRET: z.string().min(32),
     N8N_TIMEOUT: z.coerce.number().default(30000),
+    INTERNAL_DATABASE_URL: z.string().url(),
   },
 
   /**
@@ -44,6 +45,7 @@ export const env = createEnv({
     N8N_BASE_URL: process.env.N8N_BASE_URL,
     N8N_WEBHOOK_SECRET: process.env.N8N_WEBHOOK_SECRET,
     N8N_TIMEOUT: process.env.N8N_TIMEOUT,
+    INTERNAL_DATABASE_URL: process.env.INTERNAL_DATABASE_URL,
   },
   /**
    * Run `build` or `dev` with `SKIP_ENV_VALIDATION` to skip env validation. This is especially
