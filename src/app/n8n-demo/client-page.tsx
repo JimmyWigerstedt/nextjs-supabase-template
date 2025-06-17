@@ -11,7 +11,6 @@ export function N8nDemoClient() {
   const [form, setForm] = useState({ test1: "", test2: "" });
 
   const { data, refetch } = clientApi.internal.getUserData.useQuery();
-
   const { mutate: updateData, isPending: updating } =
     clientApi.internal.updateUserData.useMutation({
       onSuccess: () => {
