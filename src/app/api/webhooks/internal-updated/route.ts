@@ -7,6 +7,7 @@ const activeConnections = new Map<string, Response>();
 
 // Declare global types for pending updates
 declare global {
+  // eslint-disable-next-line no-var
   var pendingUpdates: Map<string, { updatedFields: string[]; timestamp: string }> | undefined;
 }
 
@@ -130,5 +131,4 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// Export the connections map for use by the SSE endpoint
-export { activeConnections }; 
+// Note: In production, use Redis or similar for cross-instance communication 

@@ -6,6 +6,7 @@ const activeConnections = new Map<string, ReadableStreamDefaultController>();
 
 // Declare global types for pending updates
 declare global {
+  // eslint-disable-next-line no-var
   var pendingUpdates: Map<string, { updatedFields: string[]; timestamp: string }> | undefined;
 }
 
@@ -98,19 +99,5 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// Function to send updates to specific users
-export function notifyUser(userId: string, updateData: any) {
-  const controller = activeConnections.get(userId);
-  if (controller) {
-    try {
-      const message = `data: ${JSON.stringify(updateData)}\n\n`;
-      controller.enqueue(new TextEncoder().encode(message));
-      return true;
-    } catch (error) {
-      console.error(`Failed to notify user ${userId}:`, error);
-      activeConnections.delete(userId);
-      return false;
-    }
-  }
-  return false;
-} 
+// Note: In production, you would use a more robust system like Redis pub/sub
+// for handling real-time updates across multiple server instances 

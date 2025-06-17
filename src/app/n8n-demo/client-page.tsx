@@ -7,13 +7,14 @@ import { Label } from "~/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { toast } from "sonner";
 
-interface UserData {
-  UID: string;
-  test1: string;
-  test2: string;
-  createdAt?: string;
-  updatedAt?: string;
-}
+// UserData interface for type checking
+// interface UserData {
+//   UID: string;
+//   test1: string;
+//   test2: string;
+//   createdAt?: string;
+//   updatedAt?: string;
+// }
 
 export function N8nDemoClient() {
   const [test1Input, setTest1Input] = useState("");
