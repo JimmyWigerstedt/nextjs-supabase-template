@@ -17,6 +17,7 @@ import { toast } from "sonner";
 // }
 
 export function N8nDemoClient() {
+  const utils = clientApi.useUtils(); // ADD THIS
   const [test1Input, setTest1Input] = useState("");
   const [test2Input, setTest2Input] = useState("");
   const [isConnected, setIsConnected] = useState(false);
@@ -82,81 +83,45 @@ export function N8nDemoClient() {
 
   // Initialize SSE connection for live updates
   useEffect(() => {
-    const connectSSE = () => {
+    const eventSource = new EventSource("/api/stream/user-updates");
+    eventSourceRef.current = eventSource;
+
+    eventSource.onopen = () => {
+      setIsConnected(true);
+    };
+
+    eventSource.onmessage = (event: MessageEvent<string>) => {
       try {
-        const eventSource = new EventSource("/api/stream/user-updates");
-        eventSourceRef.current = eventSource;
-
-        eventSource.onopen = () => {
-          console.log("SSE connection opened");
-          setIsConnected(true);
+        const data = JSON.parse(event.data) as {
+          type: string;
+          updatedFields?: string[];
+          timestamp?: string;
         };
 
-        eventSource.onmessage = (event: MessageEvent<string>) => {
-          try {
-            const data = JSON.parse(event.data) as {
-              type: string;
-              updatedFields?: string[];
-              fetchedValues?: Record<string, string>;
-              timestamp?: string;
-            };
-            console.log("SSE message received:", JSON.stringify(data));
-
-            switch (data.type) {
-              case "connection-established":
-                toast.success("Live updates connected!");
-                break;
-              case "userData-updated":
-                setLastUpdate(data.timestamp ?? new Date().toISOString());
-                // Highlight updated fields
-                if (data.updatedFields) {
-                  setHighlightedFields(new Set(data.updatedFields));
-                  // Clear highlights after 3 seconds
-                  setTimeout(() => {
-                    setHighlightedFields(new Set());
-                  }, 3000);
-                }
-                // Refetch data to get updated values (the webhook fetched the latest from database)
-                void refetchUserData();
-                
-                // Show the actual values that were fetched
-                const updatedValues = Object.entries(data.fetchedValues ?? {})
-                  .map(([field, value]) => `${field}: "${value}"`)
-                  .join(", ");
-                toast.success(`n8n webhook received! Updated: ${updatedValues || "fields"}`);
-                break;
-              case "heartbeat":
-                // Keep connection alive
-                break;
-            }
-          } catch (error) {
-            console.error("Failed to parse SSE message:", error);
-          }
-        };
-
-        eventSource.onerror = (error) => {
-          console.error("SSE error:", error);
-          setIsConnected(false);
-          eventSource.close();
-          
-          // Reconnect after 5 seconds
-          setTimeout(connectSSE, 5000);
-        };
+        if (data.type === "userData-updated") {
+          setLastUpdate(data.timestamp ?? new Date().toISOString());
+          // 🔧 FIX: Use invalidate instead of refetch
+          void utils.internal.getUserData.invalidate();
+        }
       } catch (error) {
-        console.error("Failed to establish SSE connection:", error);
-        setIsConnected(false);
+        console.error("Failed to parse SSE message:", error);
       }
     };
 
-    connectSSE();
+    eventSource.onerror = () => {
+      setIsConnected(false);
+      eventSource.close();
+      setTimeout(() => {
+        // Reconnect logic here if needed
+      }, 5000);
+    };
 
-    // Cleanup on unmount
     return () => {
       if (eventSourceRef.current) {
         eventSourceRef.current.close();
       }
     };
-  }, [refetchUserData]);
+  }, []); // 🔧 FIX: Empty dependency array prevents stale closures
 
   // Initialize user data on first load
   useEffect(() => {
