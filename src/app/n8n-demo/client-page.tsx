@@ -1,3 +1,21 @@
+// ==========================================
+// TEMPLATE REFERENCE: Real-Time Data Component
+// ==========================================
+// This component demonstrates the standard pattern for n8n integration.
+// 
+// TO CREATE A NEW PAGE:
+// 1. Copy this component structure
+// 2. Update DEVELOPMENT_FIELDS with your field names  
+// 3. Keep all SSE, state, and tRPC patterns identical
+// 4. Customize only the UI rendering sections
+//
+// SYSTEM MECHANICS:
+// - DEVELOPMENT_FIELDS drives form generation and database operations
+// - SSE connection enables real-time updates from n8n webhooks
+// - fieldInputs state manages form data for all configured fields
+// - tRPC mutations handle database operations and n8n communication
+// ==========================================
+
 "use client";
 import { useState, useEffect, useRef } from "react";
 import { clientApi } from "~/trpc/react";
@@ -16,7 +34,12 @@ import { toast } from "sonner";
 //   updatedAt?: string;
 // }
 
-// Add this constant at the top of the component for easy field management during development:
+// TEMPLATE PATTERN: Field Configuration
+// This array controls the entire system behavior:
+// - Form inputs are generated automatically for each field
+// - Database operations include these exact field names
+// - n8n receives these fields in the payload
+// - UI updates target these fields for highlighting
 const DEVELOPMENT_FIELDS = [
   'test1',
   'test2',
@@ -27,7 +50,13 @@ const DEVELOPMENT_FIELDS = [
 ];
 
 export function N8nDemoClient() {
-  const utils = clientApi.useUtils(); // ADD THIS
+  // TEMPLATE PATTERN: Required State Management
+  // These state variables enable the core functionality:
+  // - fieldInputs: Form data for all configured fields
+  // - highlightedFields: Visual feedback for real-time updates
+  // - isConnected: SSE connection status indication
+  // Do not modify this state structure.
+  const utils = clientApi.useUtils();
   const [fieldInputs, setFieldInputs] = useState<Record<string, string>>(
     DEVELOPMENT_FIELDS.reduce((acc, field) => {
       acc[field] = "";
@@ -111,7 +140,14 @@ export function N8nDemoClient() {
     enabled: false, // Don't run automatically
   });
 
-  // Initialize SSE connection for live updates
+  // TEMPLATE PATTERN: Real-Time Updates via SSE
+  // This connection enables automatic UI updates when n8n completes processing.
+  // The system automatically:
+  // - Establishes connection on component mount
+  // - Processes webhook notifications from n8n
+  // - Highlights updated fields and refreshes data
+  // - Handles connection failures with auto-reconnect
+  // Copy this section exactly to all new components.
   useEffect(() => {
     const eventSource = new EventSource("/api/stream/user-updates");
     eventSourceRef.current = eventSource;

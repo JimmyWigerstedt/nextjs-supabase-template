@@ -1,3 +1,19 @@
+// ==========================================
+// TEMPLATE: Dynamic Webhook Handler  
+// ==========================================
+// This webhook processes n8n completion notifications.
+// The handler automatically:
+// - Accepts any field names in updatedFields array
+// - Fetches current database values for those fields
+// - Sends real-time updates to connected users
+// - Handles offline users with pending update storage
+//
+// INTEGRATION REQUIREMENTS:
+// - n8n must send user_id matching the original request
+// - updatedFields must be array of valid database column names
+// - Handler fetches and forwards current database values
+// ==========================================
+
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { env } from "~/env";

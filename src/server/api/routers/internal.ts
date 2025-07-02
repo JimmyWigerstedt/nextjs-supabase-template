@@ -1,3 +1,17 @@
+// ==========================================
+// TEMPLATE: Dynamic Field Router
+// ==========================================
+// This router handles any field names without code modifications.
+// After implementing the flexibility changes, adding new fields
+// requires only database schema updates - no backend code changes.
+//
+// DYNAMIC CAPABILITIES:
+// - updateUserData: Accepts any field names as input
+// - getUserData: Returns all user fields dynamically  
+// - sendToN8n: Forwards any fields to n8n workflows
+// - All SQL operations handle field names dynamically
+// ==========================================
+
 import { z } from "zod";
 import { createTRPCRouter, authorizedProcedure } from "~/server/api/trpc";
 import { internalDb } from "~/server/internal-db";
@@ -184,6 +198,10 @@ export const internalRouter = createTRPCRouter({
     }
   }),
 
+  // TEMPLATE PATTERN: Dynamic Field Updates
+  // This mutation accepts any field names and values.
+  // SQL operations are generated dynamically based on input fields.
+  // No code changes needed when adding new database fields.
   updateUserData: authorizedProcedure
     .input(
       z.record(z.string(), z.string().optional())
