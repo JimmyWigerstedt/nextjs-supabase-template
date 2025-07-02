@@ -36,7 +36,7 @@ export function N8nDemoClient() {
   );
   const [isConnected, setIsConnected] = useState(false);
   const [lastUpdate, setLastUpdate] = useState<string | null>(null);
-  const [highlightedFields, setHighlightedFields] = useState<Set<string>>(new Set());
+  const [highlightedFields] = useState<Set<string>>(new Set());
   const [showDebug, setShowDebug] = useState(false);
   const eventSourceRef = useRef<EventSource | null>(null);
 
@@ -151,7 +151,7 @@ export function N8nDemoClient() {
         eventSourceRef.current.close();
       }
     };
-  }, []); // 🔧 FIX: Empty dependency array prevents stale closures
+  }, [utils.internal.getUserData]); // 🔧 FIX: Add utils dependency
 
   // Initialize user data on first load
   useEffect(() => {
@@ -234,7 +234,7 @@ export function N8nDemoClient() {
                   </Label>
                   <Input
                     id={`${fieldName}-input`}
-                    value={fieldInputs[fieldName] || ""}
+                    value={fieldInputs[fieldName] ?? ""}
                     onChange={(e) => updateFieldInput(fieldName, e.target.value)}
                     placeholder={`Enter ${fieldName} value`}
                     disabled={isUpdating}

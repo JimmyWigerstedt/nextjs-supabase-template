@@ -8,13 +8,7 @@ type UserData = {
   UID: string;
   createdAt?: string;
   updatedAt?: string;
-  [key: string]: string | undefined;
-};
-
-// Helper type for database operations
-type UserDataUpdate = {
-  [key: string]: string;
-};
+} & Record<string, string | undefined>;
 
 export const internalRouter = createTRPCRouter({
   testConnection: authorizedProcedure.query(async () => {
