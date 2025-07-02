@@ -89,7 +89,7 @@ export async function POST(request: NextRequest) {
       const client = await internalDb.connect();
       try {
         const result = await client.query(
-          'SELECT * FROM "userData" WHERE "UID" = $1',
+          `SELECT * FROM "${env.NC_SCHEMA}"."userData" WHERE "UID" = $1`,
           [user_id]
         );
         

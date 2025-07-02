@@ -49,8 +49,12 @@ export const initializeUserDataTable = async () => {
   console.log('[internal-db] Initializing userData table...');
   const client = await internalDb.connect();
   try {
+    // Ensure the NocoDB schema exists
+    await client.query(`CREATE SCHEMA IF NOT EXISTS "${env.NC_SCHEMA}"`);
+    
+    // Create table in NocoDB schema
     await client.query(`
-      CREATE TABLE IF NOT EXISTS "userData" (
+      CREATE TABLE IF NOT EXISTS "${env.NC_SCHEMA}"."userData" (
         "UID" VARCHAR PRIMARY KEY,
         "test1" VARCHAR,
         "test2" VARCHAR,

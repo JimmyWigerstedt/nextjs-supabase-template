@@ -6,9 +6,15 @@ const { Pool } = require('pg');
  */
 async function addField(fieldName, fieldType = 'VARCHAR') {
   const dbUrl = process.env.INTERNAL_DATABASE_URL;
+  const schema = process.env.NC_SCHEMA;
   
   if (!dbUrl) {
     console.error('❌ INTERNAL_DATABASE_URL environment variable is not set');
+    process.exit(1);
+  }
+  
+  if (!schema) {
+    console.error('❌ NC_SCHEMA environment variable is not set');
     process.exit(1);
   }
   
@@ -24,8 +30,8 @@ async function addField(fieldName, fieldType = 'VARCHAR') {
     const checkResult = await client.query(`
       SELECT column_name 
       FROM information_schema.columns 
-      WHERE table_name = 'userData' AND column_name = $1
-    `, [fieldName]);
+      WHERE table_schema = $1 AND table_name = 'userData' AND column_name = $2
+    `, [schema, fieldName]);
     
     if (checkResult.rows.length > 0) {
       console.log(`✅ Field '${fieldName}' already exists`);
@@ -35,7 +41,7 @@ async function addField(fieldName, fieldType = 'VARCHAR') {
     
     // Add the field
     await client.query(`
-      ALTER TABLE "userData" 
+      ALTER TABLE "${schema}"."userData" 
       ADD COLUMN "${fieldName}" ${fieldType}
     `);
     
