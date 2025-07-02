@@ -28,7 +28,7 @@
 ```typescript
 // PATTERN: Automatic current value display with highlighting
 {userData && Object.entries(userData)
-  .filter(([key]) => !['UID', 'createdAt', 'updatedAt'].includes(key))
+  .filter(([key]) => !['UID', 'created_at', 'updated_at'].includes(key))
   .map(([fieldName, value]) => (
     <div key={fieldName}>
       <Label>{fieldName} (Current Value)</Label>
@@ -201,8 +201,8 @@ const formatFieldValue = (fieldName: string, value: unknown): string => {
       return stringValue.toLowerCase();
     case 'phoneNum':
       return stringValue.replace(/(\d{3})(\d{3})(\d{4})/, '($1) $2-$3');
-    case 'createdAt':
-    case 'updatedAt':
+    case 'created_at':
+    case 'updated_at':
       return stringValue ? new Date(stringValue).toLocaleString() : '(not set)';
     default:
       return stringValue || "(empty)";
@@ -319,7 +319,7 @@ const handleUpdateData = () => {
         <p className="text-muted-foreground">Loading data...</p>
       ) : (
         userData && Object.entries(userData as Record<string, unknown>)
-          .filter(([key]) => !['UID', 'createdAt', 'updatedAt'].includes(key))
+          .filter(([key]) => !['UID', 'created_at', 'updated_at'].includes(key))
           .map(([fieldName, value]) => (
             <div key={fieldName} className="space-y-2">
               <Label>
@@ -566,7 +566,7 @@ export function NewPageClient() {
 ### Field Name Requirements
 - Must be valid JavaScript identifiers
 - Must match database column names exactly
-- Should not conflict with system fields: 'UID', 'createdAt', 'updatedAt'
+- Should not conflict with system fields: 'UID', 'created_at', 'updated_at'
 - Recommended: camelCase or snake_case naming
 
 ### CSS Classes for Highlighting

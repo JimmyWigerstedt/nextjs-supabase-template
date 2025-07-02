@@ -388,7 +388,7 @@ export function YourPageClient() {
               ) : (
                 <>
                   {userData && Object.entries(userData as Record<string, unknown>)
-                    .filter(([key]) => !['UID', 'createdAt', 'updatedAt'].includes(key))
+                    .filter(([key]) => !['UID', 'created_at', 'updated_at'].includes(key))
                     .map(([fieldName, value]) => (
                       <div key={fieldName} className="space-y-2">
                         <Label>

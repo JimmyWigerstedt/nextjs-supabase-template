@@ -152,7 +152,7 @@ display = value || "(empty)";
 ### System Field Exclusion
 ```typescript
 // These fields are never shown in UI or processed as user fields:
-const systemFields = ['UID', 'createdAt', 'updatedAt'];
+const systemFields = ['UID', 'created_at', 'updated_at'];
 const userFields = Object.keys(userData).filter(key => !systemFields.includes(key));
 ```
 

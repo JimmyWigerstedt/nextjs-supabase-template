@@ -91,7 +91,7 @@ Update your n8n workflow to:
 ### Webhook Handler (`/src/app/api/webhooks/internal-updated/route.ts`)
 - ✅ Dynamic field filtering with security validation
 - ✅ Safe field name regex: `/^[a-zA-Z][a-zA-Z0-9_]*$/`
-- ✅ System field protection (UID, createdAt, updatedAt)
+- ✅ System field protection (UID, created_at, updated_at)
 - ✅ Dynamic database value fetching
 
 ### Frontend (`/src/app/n8n-demo/client-page.tsx`)

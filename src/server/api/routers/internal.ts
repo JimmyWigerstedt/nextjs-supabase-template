@@ -20,8 +20,8 @@ import { env } from "~/env";
 // Type for user data from database - now flexible for any fields
 type UserData = {
   UID: string;
-  createdAt?: string;
-  updatedAt?: string;
+  created_at?: string;
+  updated_at?: string;
 } & Record<string, string | undefined>;
 
 export const internalRouter = createTRPCRouter({
@@ -229,12 +229,12 @@ export const internalRouter = createTRPCRouter({
         ).join(', ');
 
         const result = await client.query(
-          `INSERT INTO "${env.NC_SCHEMA}"."userData" ("UID", ${columnList}, "updatedAt") 
+          `INSERT INTO "${env.NC_SCHEMA}"."userData" ("UID", ${columnList}, "updated_at") 
            VALUES ($1, ${placeholders}, CURRENT_TIMESTAMP)
            ON CONFLICT ("UID") 
            DO UPDATE SET 
              ${updateClauses},
-             "updatedAt" = CURRENT_TIMESTAMP
+             "updated_at" = CURRENT_TIMESTAMP
            RETURNING *`,
           [ctx.supabaseUser!.id, ...values]
         );

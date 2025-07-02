@@ -92,8 +92,8 @@ CREATE TABLE IF NOT EXISTS "userData" (
   "UID" VARCHAR PRIMARY KEY,
   "test1" VARCHAR,
   "test2" VARCHAR,
-  "createdAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  "updatedAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  "created_at" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  "updated_at" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 ```
 
@@ -107,8 +107,8 @@ CREATE TABLE IF NOT EXISTS "pjo77o6pg08pd9l"."userData" (
   "UID" VARCHAR PRIMARY KEY,
   "test1" VARCHAR,
   "test2" VARCHAR,
-  "createdAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  "updatedAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  "created_at" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  "updated_at" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 ```
 
@@ -211,9 +211,9 @@ For existing installations using the old approach:
 const migrateData = async () => {
   await client.query(`
     INSERT INTO "${schema}"."userData" (
-      "UID", "test1", "test2", "createdAt", "updatedAt"
+      "UID", "test1", "test2", "created_at", "updated_at"
     )
-    SELECT "UID", "test1", "test2", "createdAt", "updatedAt"
+    SELECT "UID", "test1", "test2", "created_at", "updated_at"
     FROM public."userData"
     ON CONFLICT ("UID") DO NOTHING
   `);

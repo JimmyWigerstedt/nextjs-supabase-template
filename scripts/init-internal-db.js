@@ -36,8 +36,8 @@ async function initializeInternalDatabase() {
         "UID" VARCHAR PRIMARY KEY,
         "test1" VARCHAR,
         "test2" VARCHAR,
-        "createdAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        "updatedAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        "created_at" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        "updated_at" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
     

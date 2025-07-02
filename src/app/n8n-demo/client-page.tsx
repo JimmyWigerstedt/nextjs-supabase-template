@@ -30,8 +30,8 @@ import { toast } from "sonner";
 //   UID: string;
 //   test1: string;
 //   test2: string;
-//   createdAt?: string;
-//   updatedAt?: string;
+//   created_at?: string;
+//   updated_at?: string;
 // }
 
 // TEMPLATE PATTERN: Field Configuration
@@ -299,7 +299,7 @@ export function N8nDemoClient() {
               ) : (
                 <>
                   {userData && Object.entries(userData as Record<string, unknown>)
-                    .filter(([key]) => !['UID', 'createdAt', 'updatedAt'].includes(key))
+                    .filter(([key]) => !['UID', 'created_at', 'updated_at'].includes(key))
                     .map(([fieldName, value]) => (
                       <div key={fieldName} className="space-y-2">
                         <Label>

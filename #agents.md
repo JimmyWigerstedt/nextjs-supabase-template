@@ -57,8 +57,8 @@ CREATE TABLE IF NOT EXISTS "pjo77o6pg08pd9l"."userData" (
   "UID" VARCHAR PRIMARY KEY,        -- User ID from Supabase auth
   "test1" VARCHAR,                  -- Test field 1
   "test2" VARCHAR,                  -- Test field 2
-  "createdAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  "updatedAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  "created_at" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  "updated_at" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 )
 ```
 
