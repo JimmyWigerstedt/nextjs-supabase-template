@@ -1,16 +1,28 @@
+// ==========================================
+// TEMPLATE: Dynamic Field Router
+// ==========================================
+// This router handles any field names without code modifications.
+// After implementing the flexibility changes, adding new fields
+// requires only database schema updates - no backend code changes.
+//
+// DYNAMIC CAPABILITIES:
+// - updateUserData: Accepts any field names as input
+// - getUserData: Returns all user fields dynamically  
+// - sendToN8n: Forwards any fields to n8n workflows
+// - All SQL operations handle field names dynamically
+// ==========================================
+
 import { z } from "zod";
 import { createTRPCRouter, authorizedProcedure } from "~/server/api/trpc";
 import { internalDb } from "~/server/internal-db";
 import { env } from "~/env";
 
-// Type for user data from database
+// Type for user data from database - now flexible for any fields
 type UserData = {
   UID: string;
-  test1: string;
-  test2: string;
   createdAt?: string;
   updatedAt?: string;
-};
+} & Record<string, string | undefined>;
 
 export const internalRouter = createTRPCRouter({
   testConnection: authorizedProcedure.query(async () => {
@@ -121,10 +133,7 @@ export const internalRouter = createTRPCRouter({
 
   sendToN8n: authorizedProcedure
     .input(
-      z.object({
-        n8nDemo: z.string(),
-        n8nDemo2: z.string(),
-      })
+      z.record(z.string(), z.string())
     )
     .mutation(async ({ input, ctx }) => {
       try {
@@ -132,10 +141,7 @@ export const internalRouter = createTRPCRouter({
         const payload = {
           user_id: ctx.supabaseUser!.id,
           user_email: ctx.supabaseUser!.email,
-          data: {
-            n8nDemo: input.n8nDemo,
-            n8nDemo2: input.n8nDemo2,
-          },
+          data: input, // Pass all input fields directly
           action: "process",
         };
 
@@ -179,8 +185,6 @@ export const internalRouter = createTRPCRouter({
       if (result.rows.length === 0) {
         return {
           UID: ctx.supabaseUser!.id,
-          test1: "",
-          test2: "",
         };
       }
       
@@ -194,12 +198,13 @@ export const internalRouter = createTRPCRouter({
     }
   }),
 
+  // TEMPLATE PATTERN: Dynamic Field Updates
+  // This mutation accepts any field names and values.
+  // SQL operations are generated dynamically based on input fields.
+  // No code changes needed when adding new database fields.
   updateUserData: authorizedProcedure
     .input(
-      z.object({
-        test1: z.string().optional(),
-        test2: z.string().optional(),
-      })
+      z.record(z.string(), z.string().optional())
     )
     .mutation(async ({ input, ctx }) => {
       const client = await internalDb.connect();
@@ -209,20 +214,29 @@ export const internalRouter = createTRPCRouter({
           databaseUrl: env.INTERNAL_DATABASE_URL.replace(/\/\/[^:]+:[^@]+@/, '//***:***@')
         });
         
+        const fields = Object.keys(input);
+        const values = Object.values(input);
+
+        if (fields.length === 0) {
+          throw new Error('No fields provided for update');
+        }
+
+        // Build dynamic column list and placeholders
+        const columnList = fields.map(field => `"${field}"`).join(', ');
+        const placeholders = fields.map((_, index) => `$${index + 2}`).join(', ');
+        const updateClauses = fields.map(field => 
+          `"${field}" = COALESCE(EXCLUDED."${field}", "userData"."${field}")`
+        ).join(', ');
+
         const result = await client.query(
-          `INSERT INTO "userData" ("UID", "test1", "test2", "updatedAt") 
-           VALUES ($1, $2, $3, CURRENT_TIMESTAMP)
+          `INSERT INTO "userData" ("UID", ${columnList}, "updatedAt") 
+           VALUES ($1, ${placeholders}, CURRENT_TIMESTAMP)
            ON CONFLICT ("UID") 
            DO UPDATE SET 
-             "test1" = COALESCE(EXCLUDED."test1", "userData"."test1"),
-             "test2" = COALESCE(EXCLUDED."test2", "userData"."test2"),
+             ${updateClauses},
              "updatedAt" = CURRENT_TIMESTAMP
            RETURNING *`,
-          [
-            ctx.supabaseUser!.id,
-            input.test1 ?? null,
-            input.test2 ?? null,
-          ]
+          [ctx.supabaseUser!.id, ...values]
         );
         
         console.log(`[updateUserData] Update successful for user ${ctx.supabaseUser!.id}`, {
@@ -244,8 +258,8 @@ export const internalRouter = createTRPCRouter({
     const client = await internalDb.connect();
     try {
       const result = await client.query(
-        `INSERT INTO "userData" ("UID", "test1", "test2") 
-         VALUES ($1, '', '')
+        `INSERT INTO "userData" ("UID") 
+         VALUES ($1)
          ON CONFLICT ("UID") DO NOTHING
          RETURNING *`,
         [ctx.supabaseUser!.id]

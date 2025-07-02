@@ -45,3 +45,39 @@ This template doesn't enforce an opinion on data fetching strategies, but you do
 There is lengthy debate on what the right approach will be for each use case. I encourage you to think critically about what one is best for you. If you're not sure, try starting with the TanStack query option and try pre-fetching queries in the server component for the page.
 
 You can see examples in `prefetch/page.tsx`, `server-only-fetch/page.tsx`, and `client-only-fetch/page.tsx`. It's also worth noting that you can pre-fetch data in the initial SSR render of client components too, but I digress.
+
+## 🤖 AI Assistant Development Guide
+
+This template is optimized for AI-assisted development. The architecture enables rapid creation of new data management pages with minimal code changes.
+
+### Quick Start for AI Assistants
+
+1. **Read the patterns:** See `docs/ai-assistant-patterns.md` for complete copy-paste templates
+2. **Follow examples:** Check `docs/data-lifecycle-examples.md` for data flow understanding  
+3. **Use components:** Reference `docs/ui-component-patterns.md` for UI building blocks
+4. **Check reference:** Use `docs/quick-reference.md` for fast lookups
+
+### Template Philosophy
+
+- **Backend flexibility:** Add database fields without backend code changes
+- **Frontend control:** Hardcode UI fields for precise design control
+- **Real-time updates:** Automatic UI refresh when n8n workflows complete
+- **Type safety:** Full TypeScript coverage across the entire stack
+
+### Creating New Pages
+
+The `n8n-demo` page serves as the reference implementation. To create new functionality:
+
+1. Copy the component structure exactly
+2. Update the `DEVELOPMENT_FIELDS` array with your field names
+3. Customize only the UI rendering sections
+4. Keep all SSE, state management, and tRPC logic identical
+
+### Key Files for AI Development
+
+- `src/app/n8n-demo/client-page.tsx` - Reference implementation with template comments
+- `src/server/api/routers/internal.ts` - Dynamic backend router
+- `src/app/api/webhooks/internal-updated/route.ts` - Webhook handler for n8n responses
+- `docs/ai-assistant-patterns.md` - Complete development recipes
+
+This approach enables AI assistants to rapidly build complex, real-time data management interfaces while maintaining consistency and type safety.
