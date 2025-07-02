@@ -44,6 +44,29 @@ export async function POST(request: NextRequest) {
       newValues: newValues ?? {},
     });
     
+    // Validate updatedFields format
+    if (!Array.isArray(updatedFields) || updatedFields.some(field => typeof field !== 'string')) {
+      console.warn(`${LOG_PREFIX} Invalid updatedFields format`, { updatedFields });
+      return NextResponse.json(
+        { error: "updatedFields must be an array of strings" },
+        { status: 400 }
+      );
+    }
+
+    // Filter out potentially dangerous field names
+    const safeFields = updatedFields.filter(field => 
+      /^[a-zA-Z][a-zA-Z0-9_]*$/.test(field) && // Valid identifier
+      !['UID', 'createdAt', 'updatedAt'].includes(field) // Not system fields
+    );
+
+    if (safeFields.length === 0) {
+      console.warn(`${LOG_PREFIX} No valid fields to update`, { updatedFields });
+      return NextResponse.json(
+        { error: "No valid fields provided" },
+        { status: 400 }
+      );
+    }
+
     // Fetch current values from database (n8n already updated the database)
     const fetchedValues: Record<string, string> = {};
     try {
@@ -55,12 +78,10 @@ export async function POST(request: NextRequest) {
         );
         
         if (result.rows.length > 0) {
-          const userData = result.rows[0] as { test1?: string; test2?: string };
-          // Extract only the requested fields
-          for (const field of updatedFields) {
-            if (field === 'test1' || field === 'test2') {
-              fetchedValues[field] = userData[field] ?? '';
-            }
+          const userData = result.rows[0] as Record<string, unknown>;
+          // Extract ALL requested fields dynamically
+          for (const field of safeFields) {            
+            fetchedValues[field] = String(userData[field] ?? '');
           }
           console.info(`${LOG_PREFIX} Fetched values for user ${user_id}:`, fetchedValues);
         } else {
@@ -76,7 +97,7 @@ export async function POST(request: NextRequest) {
     
     // Prepare update data
     const updateData = {
-      updatedFields,
+      updatedFields: safeFields,
       fetchedValues,
       timestamp: new Date().toISOString(),
     };
@@ -96,7 +117,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       message: `Update processed for user ${user_id}`,
-      updatedFields,
+      updatedFields: safeFields,
       sentRealTime,
     });
     

@@ -16,15 +16,37 @@ import { toast } from "sonner";
 //   updatedAt?: string;
 // }
 
+// Add this constant at the top of the component for easy field management during development:
+const DEVELOPMENT_FIELDS = [
+  'test1',
+  'test2',
+  'customField1',    // ✨ Demo: added without any other code changes!
+  // Add new fields here during development:
+  // 'userPreference',
+  // 'workflowData',
+];
+
 export function N8nDemoClient() {
   const utils = clientApi.useUtils(); // ADD THIS
-  const [test1Input, setTest1Input] = useState("");
-  const [test2Input, setTest2Input] = useState("");
+  const [fieldInputs, setFieldInputs] = useState<Record<string, string>>(
+    DEVELOPMENT_FIELDS.reduce((acc, field) => {
+      acc[field] = "";
+      return acc;
+    }, {} as Record<string, string>)
+  );
   const [isConnected, setIsConnected] = useState(false);
   const [lastUpdate, setLastUpdate] = useState<string | null>(null);
   const [highlightedFields, setHighlightedFields] = useState<Set<string>>(new Set());
   const [showDebug, setShowDebug] = useState(false);
   const eventSourceRef = useRef<EventSource | null>(null);
+
+  // Add helper function to manage field updates:
+  const updateFieldInput = (fieldName: string, value: string) => {
+    setFieldInputs(prev => ({
+      ...prev,
+      [fieldName]: value
+    }));
+  };
 
   // tRPC queries and mutations
   const {
@@ -38,8 +60,12 @@ export function N8nDemoClient() {
       onSuccess: (_data) => {
         toast.success("Data updated successfully!");
         void refetchUserData();
-        setTest1Input("");
-        setTest2Input("");
+        setFieldInputs(prev => 
+          Object.keys(prev).reduce((acc, key) => {
+            acc[key] = "";
+            return acc;
+          }, {} as Record<string, string>)
+        );
       },
       onError: (error) => {
         toast.error(`Error: ${error.message}`);
@@ -62,8 +88,12 @@ export function N8nDemoClient() {
       onSuccess: () => {
         toast.success("Payload sent to n8n successfully! Waiting for webhook response...");
         // Clear inputs after successful send
-        setTest1Input("");
-        setTest2Input("");
+        setFieldInputs(prev => 
+          Object.keys(prev).reduce((acc, key) => {
+            acc[key] = "";
+            return acc;
+          }, {} as Record<string, string>)
+        );
       },
       onError: (error) => {
         toast.error(`n8n send failed: ${error.message}`);
@@ -131,9 +161,13 @@ export function N8nDemoClient() {
   }, [userData, isLoadingData, initializeUserData]);
 
   const handleUpdateData = () => {
-    const updates: { test1?: string; test2?: string } = {};
-    if (test1Input.trim()) updates.test1 = test1Input.trim();
-    if (test2Input.trim()) updates.test2 = test2Input.trim();
+    const updates: Record<string, string> = {};
+    
+    Object.entries(fieldInputs).forEach(([fieldName, value]) => {
+      if (value.trim()) {
+        updates[fieldName] = value.trim();
+      }
+    });
 
     if (Object.keys(updates).length === 0) {
       toast.error("Please enter at least one field to update");
@@ -144,15 +178,20 @@ export function N8nDemoClient() {
   };
 
   const handleSendToN8n = () => {
-    if (!test1Input.trim() && !test2Input.trim()) {
+    const dataToSend: Record<string, string> = {};
+    
+    Object.entries(fieldInputs).forEach(([fieldName, value]) => {
+      if (value.trim()) {
+        dataToSend[fieldName] = value.trim();
+      }
+    });
+
+    if (Object.keys(dataToSend).length === 0) {
       toast.error("Please enter some data to send to n8n");
       return;
     }
 
-    sendToN8n({
-      n8nDemo: test1Input.trim(),
-      n8nDemo2: test2Input.trim(),
-    });
+    sendToN8n(dataToSend);
   };
 
   const getFieldHighlight = (fieldName: string) => {
@@ -188,27 +227,20 @@ export function N8nDemoClient() {
               <CardTitle>Data Input Section</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="test1-input">Test Field 1</Label>
-                <Input
-                  id="test1-input"
-                  value={test1Input}
-                  onChange={(e) => setTest1Input(e.target.value)}
-                  placeholder="Enter test1 value"
-                  disabled={isUpdating}
-                />
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="test2-input">Test Field 2</Label>
-                <Input
-                  id="test2-input"
-                  value={test2Input}
-                  onChange={(e) => setTest2Input(e.target.value)}
-                  placeholder="Enter test2 value"
-                  disabled={isUpdating}
-                />
-              </div>
+              {Object.keys(fieldInputs).map((fieldName) => (
+                <div key={fieldName} className="space-y-2">
+                  <Label htmlFor={`${fieldName}-input`}>
+                    {fieldName.charAt(0).toUpperCase() + fieldName.slice(1).replace(/([A-Z])/g, ' $1')}
+                  </Label>
+                  <Input
+                    id={`${fieldName}-input`}
+                    value={fieldInputs[fieldName] || ""}
+                    onChange={(e) => updateFieldInput(fieldName, e.target.value)}
+                    placeholder={`Enter ${fieldName} value`}
+                    disabled={isUpdating}
+                  />
+                </div>
+              ))}
               
               <Button 
                 onClick={handleUpdateData} 
@@ -230,19 +262,19 @@ export function N8nDemoClient() {
                 <p className="text-muted-foreground">Loading data...</p>
               ) : (
                 <>
-                  <div className="space-y-2">
-                    <Label>Test Field 1 (Current Value)</Label>
-                    <div className={`p-3 border rounded-md bg-muted ${getFieldHighlight('test1')}`}>
-                      {(userData as { test1?: string })?.test1 ?? "(empty)"}
-                    </div>
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <Label>Test Field 2 (Current Value)</Label>
-                    <div className={`p-3 border rounded-md bg-muted ${getFieldHighlight('test2')}`}>
-                      {(userData as { test2?: string })?.test2 ?? "(empty)"}
-                    </div>
-                  </div>
+                  {userData && Object.entries(userData as Record<string, unknown>)
+                    .filter(([key]) => !['UID', 'createdAt', 'updatedAt'].includes(key))
+                    .map(([fieldName, value]) => (
+                      <div key={fieldName} className="space-y-2">
+                        <Label>
+                          {fieldName.charAt(0).toUpperCase() + fieldName.slice(1).replace(/([A-Z])/g, ' $1')} (Current Value)
+                        </Label>
+                        <div className={`p-3 border rounded-md bg-muted ${getFieldHighlight(fieldName)}`}>
+                          {String(value) || "(empty)"}
+                        </div>
+                      </div>
+                    ))
+                  }
                   
                   {lastUpdate && (
                     <div className="text-sm text-muted-foreground">
