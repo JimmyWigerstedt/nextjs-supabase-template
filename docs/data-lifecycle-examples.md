@@ -5,7 +5,7 @@
 ### Step 1: Field Addition
 ```bash
 npm run add-field customerStatus
-# Creates: ALTER TABLE "userData" ADD COLUMN "customerStatus" VARCHAR;
+# Creates: ALTER TABLE "${NC_SCHEMA}"."userData" ADD COLUMN "customerStatus" VARCHAR;
 ```
 
 ### Step 2: Component Configuration
@@ -137,7 +137,7 @@ User reconnects → Pending update sent immediately
 ### Database Field Types
 All user fields are stored as VARCHAR in the internal database:
 ```sql
-ALTER TABLE "userData" ADD COLUMN "fieldName" VARCHAR;
+ALTER TABLE "${NC_SCHEMA}"."userData" ADD COLUMN "fieldName" VARCHAR;
 ```
 
 ### Type Handling
@@ -152,7 +152,7 @@ display = value || "(empty)";
 ### System Field Exclusion
 ```typescript
 // These fields are never shown in UI or processed as user fields:
-const systemFields = ['UID', 'createdAt', 'updatedAt'];
+const systemFields = ['UID', 'created_at', 'updated_at'];
 const userFields = Object.keys(userData).filter(key => !systemFields.includes(key));
 ```
 

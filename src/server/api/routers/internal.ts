@@ -20,8 +20,8 @@ import { env } from "~/env";
 // Type for user data from database - now flexible for any fields
 type UserData = {
   UID: string;
-  createdAt?: string;
-  updatedAt?: string;
+  created_at?: string;
+  updated_at?: string;
 } & Record<string, string | undefined>;
 
 export const internalRouter = createTRPCRouter({
@@ -55,9 +55,9 @@ export const internalRouter = createTRPCRouter({
           data_type,
           is_nullable
         FROM information_schema.columns 
-        WHERE table_name = 'userData'
+        WHERE table_schema = $1 AND table_name = 'userData'
         ORDER BY ordinal_position
-      `);
+      `, [env.NC_SCHEMA]);
       console.log('[testConnection] Table structure:', tableInfo.rows);
       
       return {
@@ -101,12 +101,12 @@ export const internalRouter = createTRPCRouter({
       const tableCheck = await client.query(`
         SELECT EXISTS (
           SELECT FROM information_schema.tables 
-          WHERE table_name = 'userData'
+          WHERE table_schema = $1 AND table_name = 'userData'
         );
-      `);
+      `, [env.NC_SCHEMA]);
       
       // Get all user data for debugging
-      const allData = await client.query('SELECT * FROM "userData"');
+      const allData = await client.query(`SELECT * FROM "${env.NC_SCHEMA}"."userData"`);
       
       return {
         connection: "✅ Connected",
@@ -178,7 +178,7 @@ export const internalRouter = createTRPCRouter({
     const client = await internalDb.connect();
     try {
       const result = await client.query(
-        'SELECT * FROM "userData" WHERE "UID" = $1',
+        `SELECT * FROM "${env.NC_SCHEMA}"."userData" WHERE "UID" = $1`,
         [ctx.supabaseUser!.id]
       );
       
@@ -225,16 +225,16 @@ export const internalRouter = createTRPCRouter({
         const columnList = fields.map(field => `"${field}"`).join(', ');
         const placeholders = fields.map((_, index) => `$${index + 2}`).join(', ');
         const updateClauses = fields.map(field => 
-          `"${field}" = COALESCE(EXCLUDED."${field}", "userData"."${field}")`
+          `"${field}" = COALESCE(EXCLUDED."${field}", "${env.NC_SCHEMA}"."userData"."${field}")`
         ).join(', ');
 
         const result = await client.query(
-          `INSERT INTO "userData" ("UID", ${columnList}, "updatedAt") 
+          `INSERT INTO "${env.NC_SCHEMA}"."userData" ("UID", ${columnList}, "updated_at") 
            VALUES ($1, ${placeholders}, CURRENT_TIMESTAMP)
            ON CONFLICT ("UID") 
            DO UPDATE SET 
              ${updateClauses},
-             "updatedAt" = CURRENT_TIMESTAMP
+             "updated_at" = CURRENT_TIMESTAMP
            RETURNING *`,
           [ctx.supabaseUser!.id, ...values]
         );
@@ -258,7 +258,7 @@ export const internalRouter = createTRPCRouter({
     const client = await internalDb.connect();
     try {
       const result = await client.query(
-        `INSERT INTO "userData" ("UID") 
+        `INSERT INTO "${env.NC_SCHEMA}"."userData" ("UID") 
          VALUES ($1)
          ON CONFLICT ("UID") DO NOTHING
          RETURNING *`,
@@ -268,7 +268,7 @@ export const internalRouter = createTRPCRouter({
       if (result.rows.length === 0) {
         // If no rows returned, record already exists, fetch it
         const existing = await client.query(
-          'SELECT * FROM "userData" WHERE "UID" = $1',
+          `SELECT * FROM "${env.NC_SCHEMA}"."userData" WHERE "UID" = $1`,
           [ctx.supabaseUser!.id]
         );
         // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment

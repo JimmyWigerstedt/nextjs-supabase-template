@@ -57,15 +57,15 @@ type UserData = {
   UID: string;
   test1: string;
   test2: string;
-  createdAt?: string;
-  updatedAt?: string;
+  created_at?: string;
+  updated_at?: string;
 };
 
 // AFTER: Dynamic & Flexible  
 type UserData = {
   UID: string;
-  createdAt?: string;
-  updatedAt?: string;
+  created_at?: string;
+  updated_at?: string;
   [key: string]: string | undefined;  // 🚀 Any field supported!
 };
 ```
@@ -85,11 +85,11 @@ type UserData = {
 #### 🎯 SQL Generation Evolution
 ```sql
 -- BEFORE: Hardcoded SQL
-INSERT INTO "userData" ("UID", "test1", "test2", "updatedAt") 
+INSERT INTO "userData" ("UID", "test1", "test2", "updated_at") 
 VALUES ($1, $2, $3, CURRENT_TIMESTAMP)
 
 -- AFTER: Dynamic SQL  
-INSERT INTO "userData" ("UID", ${columnList}, "updatedAt") 
+INSERT INTO "userData" ("UID", ${columnList}, "updated_at") 
 VALUES ($1, ${placeholders}, CURRENT_TIMESTAMP)
 ```
 
@@ -110,7 +110,7 @@ VALUES ($1, ${placeholders}, CURRENT_TIMESTAMP)
 
 ### ✅ Field Name Validation
 - **Regex Pattern**: `/^[a-zA-Z][a-zA-Z0-9_]*$/`
-- **System Protection**: UID, createdAt, updatedAt filtered out
+- **System Protection**: UID, created_at, updated_at filtered out
 - **SQL Injection Prevention**: Parameterized queries only
 
 ### ✅ Type Safety Maintained

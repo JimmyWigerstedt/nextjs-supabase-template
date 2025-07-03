@@ -16,7 +16,7 @@ This is everything you need to start building an advanced app.
 
 ## Quick Start
 
-If you're familiar with these systems, here's your guide to getting going. The short of it is that you need an account with Supabase, and the rest will take care of itself. See `.env.example` to know what to add; you'll add this to your `.env` file. See the [Supabase Docs](https://supabase.com/docs/guides/getting-started/quickstarts/nextjs) for what specifically to do. For n8n workflows, read the [n8n integration guide](docs/n8n-integration.md) and configure `N8N_BASE_URL`, `N8N_WEBHOOK_SECRET`, and `N8N_TIMEOUT`. That guide covers how your authenticated user's details are automatically forwarded to n8n.
+If you're familiar with these systems, here's your guide to getting going. The short of it is that you need an account with Supabase, and the rest will take care of itself. See `.env.example` to know what to add; you'll add this to your `.env` file. See the [Supabase Docs](https://supabase.com/docs/guides/getting-started/quickstarts/nextjs) for what specifically to do. For n8n workflows, read the [n8n integration guide](docs/n8n-integration.md) and configure `N8N_BASE_URL`, `N8N_WEBHOOK_SECRET`, and `N8N_TIMEOUT`. For NocoDB integration, set `NC_SCHEMA` to your NocoDB schema name (e.g., "pjo77o6pg08pd9l"). That guide covers how your authenticated user's details are automatically forwarded to n8n.
 
 Once you do this, you can start the development server with `npm run dev` and visit `localhost:3000` to get started.
 

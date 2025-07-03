@@ -105,7 +105,7 @@ Document how dynamic displays work:
 // PATTERN: Dynamic value display
 // The system shows current database values with automatic highlighting
 {userData && Object.entries(userData)
-  .filter(([key]) => !['UID', 'createdAt', 'updatedAt'].includes(key))
+                  .filter(([key]) => !['UID', 'created_at', 'updated_at'].includes(key))
   .map(([fieldName, value]) => (
     <div key={fieldName}>
       <Label>{fieldName} (Current Value)</Label>

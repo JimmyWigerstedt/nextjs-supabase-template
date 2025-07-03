@@ -72,7 +72,7 @@ export async function POST(request: NextRequest) {
     // Filter out potentially dangerous field names
     const safeFields = updatedFields.filter(field => 
       /^[a-zA-Z][a-zA-Z0-9_]*$/.test(field) && // Valid identifier
-      !['UID', 'createdAt', 'updatedAt'].includes(field) // Not system fields
+      !['UID', 'created_at', 'updated_at'].includes(field) // Not system fields
     );
 
     if (safeFields.length === 0) {
@@ -89,7 +89,7 @@ export async function POST(request: NextRequest) {
       const client = await internalDb.connect();
       try {
         const result = await client.query(
-          'SELECT * FROM "userData" WHERE "UID" = $1',
+          `SELECT * FROM "${env.NC_SCHEMA}"."userData" WHERE "UID" = $1`,
           [user_id]
         );
         

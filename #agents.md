@@ -47,14 +47,18 @@ The project uses SSE for real-time updates between n8n webhooks and the frontend
 
 ## Database Schema
 
-### Internal Database (userData table)
+### Internal Database (userData table with NocoDB Schema)
 ```sql
-CREATE TABLE IF NOT EXISTS "userData" (
+-- Schema creation
+CREATE SCHEMA IF NOT EXISTS "pjo77o6pg08pd9l";
+
+-- Table creation within schema
+CREATE TABLE IF NOT EXISTS "pjo77o6pg08pd9l"."userData" (
   "UID" VARCHAR PRIMARY KEY,        -- User ID from Supabase auth
   "test1" VARCHAR,                  -- Test field 1
   "test2" VARCHAR,                  -- Test field 2
-  "createdAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  "updatedAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  "created_at" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  "updated_at" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 )
 ```
 
@@ -67,6 +71,7 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY="placeholder-key"
 N8N_BASE_URL="https://placeholder-n8n-instance.railway.app"
 N8N_WEBHOOK_SECRET="placeholder-secure-shared-secret-at-least-32-characters-long"
 N8N_TIMEOUT=30000
+NC_SCHEMA="pjo77o6pg08pd9l"
 ```
 
 ## Common TypeScript Issues
