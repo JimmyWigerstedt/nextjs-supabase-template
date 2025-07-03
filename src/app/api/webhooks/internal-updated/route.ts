@@ -26,12 +26,11 @@ export async function POST(request: NextRequest) {
   try {
     console.info(`${LOG_PREFIX} Webhook received`);
     
-    // Verify webhook secret (for demo, we'll accept a test secret)
-    const authHeader = request.headers.get("authorization");
-    const expectedSecret = `Bearer ${env.N8N_WEBHOOK_SECRET}`;
-    const testSecret = `Bearer test-webhook-secret-for-demo`;
+    // Verify webhook secret
+    const authHeader = request.headers.get("x-webhook-secret");
+    const expectedSecret = env.N8N_WEBHOOK_SECRET;
     
-    if (authHeader !== expectedSecret && authHeader !== testSecret) {
+    if (authHeader !== expectedSecret) {
       console.warn(`${LOG_PREFIX} Unauthorized webhook attempt`);
       return NextResponse.json(
         { error: "Unauthorized" },

@@ -10,7 +10,7 @@
 ### 2. **n8n Integration Direction**
 - ❌ **Before**: "Simulate n8n Update" was sending webhooks TO the app (wrong direction)
 - ✅ **After**: "Send to n8n" now properly sends payloads TO n8n at `${N8N_BASE_URL}/webhook/your-n8n-endpoint`
-- ✅ **Added**: Proper authentication headers (`Auth: x-webhook-secret` with value `"ContentDripAuth!"`)
+- ✅ **Added**: Proper authentication headers (`x-webhook-secret` with environment variable `N8N_WEBHOOK_SECRET`)
 
 ### 3. **Webhook Handler Behavior**
 - ❌ **Before**: Webhook handler was trying to UPDATE the database (wrong - n8n already did this)
@@ -108,7 +108,7 @@ User Clicks "Send to n8n" →
 ```bash
 INTERNAL_DATABASE_URL="postgresql://username:password@host:port/database"
 N8N_BASE_URL="https://your-n8n-domain.com"
-N8N_WEBHOOK_SECRET="ContentDripAuth!"
+N8N_WEBHOOK_SECRET="your-secure-shared-secret-at-least-32-chars"
 ```
 
 The system now works exactly as intended with proper separation of concerns and correct data flow directions! 
