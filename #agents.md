@@ -101,9 +101,10 @@ const connections = global.activeSSEConnections ?? new Map();
 ```
 
 ### Authentication
-Webhook accepts either:
-- `Bearer ${N8N_WEBHOOK_SECRET}` (production)
-- `Bearer test-webhook-secret-for-demo` (testing)
+Both directions of N8N communication now use the same standardized approach:
+- **App → N8N**: Uses `x-webhook-secret` header with `N8N_WEBHOOK_SECRET` value
+- **N8N → App**: Expects `x-webhook-secret` header with `N8N_WEBHOOK_SECRET` value
+- **Result**: Same header format and same secret value in both directions
 
 ## Troubleshooting
 

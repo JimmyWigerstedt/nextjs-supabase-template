@@ -150,8 +150,7 @@ export const internalRouter = createTRPCRouter({
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            "Auth": "x-webhook-secret",
-            "x-webhook-secret": "ContentDripAuth!",
+            "x-webhook-secret": env.N8N_WEBHOOK_SECRET,
           },
           body: JSON.stringify(payload),
         });
