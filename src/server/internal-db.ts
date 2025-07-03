@@ -44,31 +44,39 @@ internalDb.on('error', (err) => {
   console.error('[internal-db] Database pool error:', err);
 });
 
-// Initialize userData table if it doesn't exist
-export const initializeUserDataTable = async () => {
-  console.log('[internal-db] Initializing userData table...');
+// Ensure UID constraint exists without creating tables
+export const ensureUidConstraintOnce = async () => {
+  console.log('[internal-db] Checking UID constraint...');
   const client = await internalDb.connect();
   try {
-    // Ensure the NocoDB schema exists
-    await client.query(`CREATE SCHEMA IF NOT EXISTS "${env.NC_SCHEMA}"`);
-    
-    // Create table in NocoDB schema
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS "${env.NC_SCHEMA}"."userData" (
-        "UID" VARCHAR PRIMARY KEY,
-        "test1" VARCHAR,
-        "test2" VARCHAR,
-        "created_at" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        "updated_at" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
+    // Check if UID unique constraint exists
+    const constraintCheck = await client.query(`
+      SELECT constraint_name 
+      FROM information_schema.table_constraints 
+      WHERE table_name = 'userData' 
+      AND constraint_type IN ('UNIQUE', 'PRIMARY KEY')
+      AND constraint_name ILIKE '%uid%'
     `);
-    console.log('[internal-db] userData table initialized successfully');
+    
+    // Add unique constraint if it doesn't exist
+    if (constraintCheck.rows.length === 0) {
+      await client.query(`
+        ALTER TABLE "${env.NC_SCHEMA}"."userData" 
+        ADD CONSTRAINT unique_uid UNIQUE ("UID")
+      `);
+      console.log('[internal-db] ✅ Added unique constraint to UID');
+    } else {
+      console.log('[internal-db] ✅ UID constraint already exists');
+    }
   } catch (error) {
-    console.error('[internal-db] Failed to initialize userData table:', error);
+    // Constraint might already exist with different name, or UID is already primary key
+    console.log('[internal-db] UID constraint check:', error instanceof Error ? error.message : String(error));
   } finally {
     client.release();
   }
 };
 
-// Initialize table on first import
-initializeUserDataTable().catch(console.error); 
+// Ensure UID constraint exists on app startup
+if (process.env.NODE_ENV !== 'test') {
+  ensureUidConstraintOnce().catch(console.error);
+} 
