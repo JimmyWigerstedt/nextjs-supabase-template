@@ -42,10 +42,10 @@ async function PricingContent() {
   return (
     <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
       <PricingCard
-        name={basePlan?.name || 'Base'}
-        price={basePrice?.unitAmount || 800}
-        interval={basePrice?.interval || 'month'}
-        trialDays={basePrice?.trialPeriodDays || 7}
+        name={basePlan?.name ?? 'Base'}
+        price={basePrice?.unitAmount ?? 800}
+        interval={basePrice?.interval ?? 'month'}
+        trialDays={basePrice?.trialPeriodDays ?? 7}
         features={[
           'Basic Features',
           'Email Support',
@@ -56,10 +56,10 @@ async function PricingContent() {
         popular={false}
       />
       <PricingCard
-        name={plusPlan?.name || 'Plus'}
-        price={plusPrice?.unitAmount || 1200}
-        interval={plusPrice?.interval || 'month'}
-        trialDays={plusPrice?.trialPeriodDays || 7}
+        name={plusPlan?.name ?? 'Plus'}
+        price={plusPrice?.unitAmount ?? 1200}
+        interval={plusPrice?.interval ?? 'month'}
+        trialDays={plusPrice?.trialPeriodDays ?? 7}
         features={[
           'Everything in Base',
           'Priority Support',
@@ -71,10 +71,10 @@ async function PricingContent() {
         popular={true}
       />
       <PricingCard
-        name={premiumPlan?.name || 'Premium'}
-        price={premiumPrice?.unitAmount || 2000}
-        interval={premiumPrice?.interval || 'month'}
-        trialDays={premiumPrice?.trialPeriodDays || 7}
+        name={premiumPlan?.name ?? 'Premium'}
+        price={premiumPrice?.unitAmount ?? 2000}
+        interval={premiumPrice?.interval ?? 'month'}
+        trialDays={premiumPrice?.trialPeriodDays ?? 7}
         features={[
           'Everything in Plus',
           '24/7 Priority Support',

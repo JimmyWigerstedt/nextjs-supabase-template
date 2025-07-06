@@ -1,13 +1,14 @@
-import Stripe from 'stripe';
+import type Stripe from 'stripe';
 import { handleSubscriptionChange, handleCustomerCreated, stripe } from '~/lib/payments/stripe';
 import { env } from "~/env";
-import { NextRequest, NextResponse } from 'next/server';
+import type { NextRequest } from 'next/server';
+import { NextResponse } from 'next/server';
 
 const webhookSecret = env.STRIPE_WEBHOOK_SECRET;
 
 export async function POST(request: NextRequest) {
   const payload = await request.text();
-  const signature = request.headers.get('stripe-signature') as string;
+  const signature = request.headers.get('stripe-signature')!;
 
   let event: Stripe.Event;
 
@@ -28,12 +29,12 @@ export async function POST(request: NextRequest) {
       case 'customer.subscription.created':
       case 'customer.subscription.updated':
       case 'customer.subscription.deleted':
-        const subscription = event.data.object as Stripe.Subscription;
+        const subscription = event.data.object;
         await handleSubscriptionChange(subscription);
         break;
       
       case 'customer.created':
-        const customer = event.data.object as Stripe.Customer;
+        const customer = event.data.object;
         await handleCustomerCreated(customer);
         break;
       

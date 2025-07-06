@@ -66,7 +66,7 @@ export async function createCheckoutSession({
     mode: 'subscription',
     success_url: `${env.BASE_URL}/api/stripe/checkout?session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: `${env.BASE_URL}/pricing`,
-    customer: userData.stripeCustomerId || undefined,
+    customer: userData.stripeCustomerId ?? undefined,
     client_reference_id: user.id,
     allow_promotion_codes: true,
     subscription_data: {

@@ -1,9 +1,9 @@
-import { NextRequest, NextResponse } from 'next/server';
+import type { NextRequest } from 'next/server';
+import { NextResponse } from 'next/server';
 import { stripe } from '~/lib/payments/stripe';
-import { supabaseServer } from "~/util/supabase/server";
 import { internalDb } from "~/server/internal-db";
 import { env } from "~/env";
-import Stripe from 'stripe';
+import type Stripe from 'stripe';
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
