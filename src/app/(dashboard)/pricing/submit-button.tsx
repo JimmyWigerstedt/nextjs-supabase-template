@@ -16,8 +16,10 @@ export function SubmitButton({
   const [isLoading, setIsLoading] = useState(false);
   
   const createCheckoutSession = clientApi.payments.createCheckoutSession.useMutation({
-    onSuccess: () => {
+    onSuccess: (data) => {
       toast.success(`Redirecting to checkout for ${planName}...`);
+      // Redirect to Stripe checkout
+      window.location.href = data.url;
     },
     onError: (error) => {
       toast.error(`Failed to create checkout session: ${error.message}`);

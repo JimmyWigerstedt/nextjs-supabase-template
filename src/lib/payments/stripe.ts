@@ -74,7 +74,7 @@ export async function createCheckoutSession({
     }
   });
 
-  redirect(session.url!);
+  return session.url!;
 }
 
 export async function createCustomerPortalSession(userId: string) {
