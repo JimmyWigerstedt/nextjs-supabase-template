@@ -31,4 +31,4 @@ export const paymentsRouter = createTRPCRouter({
     .query(async () => {
       return await getStripeProducts();
     }),
-});
+}); 

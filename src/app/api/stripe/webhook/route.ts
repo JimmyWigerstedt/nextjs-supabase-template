@@ -1,6 +1,6 @@
 import Stripe from 'stripe';
-import { handleSubscriptionChange, handleCustomerCreated, stripe } from '../../../../lib/payments/stripe';
-import { env } from "../../../../src/env";
+import { handleSubscriptionChange, handleCustomerCreated, stripe } from '~/lib/payments/stripe';
+import { env } from "~/env";
 import { NextRequest, NextResponse } from 'next/server';
 
 const webhookSecret = env.STRIPE_WEBHOOK_SECRET;

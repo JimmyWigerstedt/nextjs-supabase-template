@@ -222,4 +222,4 @@ export async function getStripeProducts() {
         ? product.default_price
         : product.default_price?.id
   }));
-}
+} 

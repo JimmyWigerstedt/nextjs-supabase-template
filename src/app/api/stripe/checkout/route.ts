@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { stripe } from '../../../../lib/payments/stripe';
-import { supabaseServer } from "../../../../src/util/supabase/server";
-import { internalDb } from "../../../../src/server/internal-db";
-import { env } from "../../../../src/env";
+import { stripe } from '~/lib/payments/stripe';
+import { supabaseServer } from "~/util/supabase/server";
+import { internalDb } from "~/server/internal-db";
+import { env } from "~/env";
 import Stripe from 'stripe';
 
 export async function GET(request: NextRequest) {

@@ -64,4 +64,8 @@ if (args.length < 1) {
 }
 
 const [fieldName, fieldType = 'VARCHAR'] = args;
+if (!fieldName) {
+  console.error('Usage: node scripts/add-field.js <fieldName> [fieldType]');
+  process.exit(1);
+}
 await addField(fieldName, fieldType); 

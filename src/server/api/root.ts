@@ -1,7 +1,7 @@
 import { exampleRouter } from "~/server/api/routers/example";
 import { n8nRouter } from "~/server/api/routers/n8n";
 import { internalRouter } from "~/server/api/routers/internal";
-import { paymentsRouter } from "../../../lib/payments/actions";
+import { paymentsRouter } from "~/lib/payments/actions";
 import { createCallerFactory, createTRPCRouter } from "~/server/api/trpc";
 
 /**
