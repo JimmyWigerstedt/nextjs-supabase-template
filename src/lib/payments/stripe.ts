@@ -200,11 +200,71 @@ export async function getStripePrices() {
     id: price.id,
     productId:
       typeof price.product === 'string' ? price.product : price.product.id,
+    productName:
+      typeof price.product === 'string' ? '' : price.product.name,
     unitAmount: price.unit_amount,
     currency: price.currency,
     interval: price.recurring?.interval,
     trialPeriodDays: price.recurring?.trial_period_days
   }));
+}
+
+export type StripePrice = {
+  id: string;
+  productId: string;
+  productName: string;
+  unitAmount: number | null;
+  currency: string;
+  interval: string | undefined;
+  trialPeriodDays: number | null | undefined;
+};
+
+export type OrganizedPrices = {
+  [productId: string]: {
+    productName: string;
+    monthly?: StripePrice;
+    yearly?: StripePrice;
+    savings?: number; // Percentage savings when choosing yearly
+  };
+};
+
+export async function getOrganizedStripePrices(): Promise<OrganizedPrices> {
+  const prices = await getStripePrices();
+  const organized: OrganizedPrices = {};
+
+  // Group prices by product
+  prices.forEach((price) => {
+    if (!organized[price.productId]) {
+      organized[price.productId] = {
+        productName: price.productName,
+      };
+    }
+
+    if (price.interval === 'month') {
+      organized[price.productId].monthly = price;
+    } else if (price.interval === 'year') {
+      organized[price.productId].yearly = price;
+    }
+  });
+
+  // Calculate savings for each product
+  Object.keys(organized).forEach((productId) => {
+    const product = organized[productId];
+    if (product.monthly && product.yearly) {
+      product.savings = calculateSavings(product.monthly, product.yearly);
+    }
+  });
+
+  return organized;
+}
+
+export function calculateSavings(monthlyPrice: StripePrice, yearlyPrice: StripePrice): number {
+  if (!monthlyPrice.unitAmount || !yearlyPrice.unitAmount) return 0;
+  
+  const monthlyTotal = monthlyPrice.unitAmount * 12;
+  const savings = ((monthlyTotal - yearlyPrice.unitAmount) / monthlyTotal) * 100;
+  
+  return Math.round(Math.max(0, savings)); // Ensure non-negative savings
 }
 
 export async function getStripeProducts() {

@@ -4,7 +4,8 @@ import {
   createCheckoutSession, 
   createCustomerPortalSession,
   getStripePrices,
-  getStripeProducts
+  getStripeProducts,
+  getOrganizedStripePrices
 } from './stripe';
 
 export const paymentsRouter = createTRPCRouter({
@@ -24,6 +25,11 @@ export const paymentsRouter = createTRPCRouter({
   getStripePrices: authorizedProcedure
     .query(async () => {
       return await getStripePrices();
+    }),
+
+  getOrganizedStripePrices: authorizedProcedure
+    .query(async () => {
+      return await getOrganizedStripePrices();
     }),
 
   getStripeProducts: authorizedProcedure
