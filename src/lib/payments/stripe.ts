@@ -220,14 +220,12 @@ export type StripePrice = {
   trialPeriodDays: number | null | undefined;
 };
 
-export type OrganizedPrices = {
-  [productId: string]: {
-    productName: string;
-    monthly?: StripePrice;
-    yearly?: StripePrice;
-    savings?: number; // Percentage savings when choosing yearly
-  };
-};
+export type OrganizedPrices = Record<string, {
+  productName: string;
+  monthly?: StripePrice;
+  yearly?: StripePrice;
+  savings?: number; // Percentage savings when choosing yearly
+}>;
 
 export async function getOrganizedStripePrices(): Promise<OrganizedPrices> {
   const prices = await getStripePrices();
@@ -251,7 +249,7 @@ export async function getOrganizedStripePrices(): Promise<OrganizedPrices> {
   // Calculate savings for each product
   Object.keys(organized).forEach((productId) => {
     const product = organized[productId];
-    if (product && product.monthly && product.yearly) {
+    if (product?.monthly && product?.yearly) {
       product.savings = calculateSavings(product.monthly, product.yearly);
     }
   });

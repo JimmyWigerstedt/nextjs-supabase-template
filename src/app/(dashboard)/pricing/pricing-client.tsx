@@ -2,10 +2,10 @@
 
 import { useState } from 'react';
 import { Check } from 'lucide-react';
-import { BillingToggle, BillingInterval } from '~/components/ui/billing-toggle';
+import { BillingToggle, type BillingInterval } from '~/components/ui/billing-toggle';
 import { SubmitButton } from './submit-button';
 import { clientApi } from "~/trpc/react";
-import type { OrganizedPrices, StripePrice } from '~/lib/payments/stripe';
+import type { StripePrice } from '~/lib/payments/stripe';
 
 export function PricingPageClient() {
   const [billingInterval, setBillingInterval] = useState<BillingInterval>('monthly');
@@ -41,7 +41,7 @@ export function PricingPageClient() {
 
       {/* Pricing Cards */}
       <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
-        {products.map((product, index) => (
+        {products.map((product) => (
           <PricingCard
             key={product.id}
             product={product}
@@ -55,7 +55,7 @@ export function PricingPageClient() {
       {billingInterval === 'yearly' && (
         <div className="text-center">
           <p className="text-sm text-green-600 font-medium">
-            💰 Save up to {Math.max(...products.map(p => p.savings || 0))}% with annual billing
+            💰 Save up to {Math.max(...products.map(p => p.savings ?? 0))}% with annual billing
           </p>
         </div>
       )}
@@ -77,8 +77,8 @@ interface PricingCardProps {
 
 function PricingCard({ product, billingInterval, popular }: PricingCardProps) {
   const currentPrice = billingInterval === 'yearly' ? product.yearly : product.monthly;
-  const fallbackPrice = product.monthly || product.yearly;
-  const price = currentPrice || fallbackPrice;
+  const fallbackPrice = product.monthly ?? product.yearly;
+  const price = currentPrice ?? fallbackPrice;
 
   if (!price) {
     return null;
@@ -122,7 +122,7 @@ function PricingCard({ product, billingInterval, popular }: PricingCardProps) {
       <div className="text-center">
         <h3 className="text-xl font-semibold text-gray-900 mb-2">{product.productName}</h3>
         <p className="text-sm text-gray-600 mb-4">
-          {price.trialPeriodDays || 7} day free trial
+          {price.trialPeriodDays ?? 7} day free trial
         </p>
         <div className="mb-6">
           {billingInterval === 'yearly' && monthlyEquivalent ? (
@@ -193,7 +193,7 @@ function getFeatures(planName: string): string[] {
     ],
   };
 
-  return features[planName] || [];
+  return features[planName] ?? [];
 }
 
 function PricingPageSkeleton() {
