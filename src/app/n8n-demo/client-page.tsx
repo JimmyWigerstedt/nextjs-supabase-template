@@ -166,7 +166,7 @@ export function N8nDemoClient() {
 
         if (data.type === "userData-updated") {
           setLastUpdate(data.timestamp ?? new Date().toISOString());
-          // 🔧 FIX: Use invalidate instead of refetch
+          // Use invalidate instead of refetch for better performance
           void utils.internal.getUserData.invalidate();
         }
       } catch (error) {
@@ -187,7 +187,7 @@ export function N8nDemoClient() {
         eventSourceRef.current.close();
       }
     };
-  }, [utils.internal.getUserData]); // 🔧 FIX: Add utils dependency
+  }, []); // Empty dependency array - SSE connection should only be created once
 
   // Initialize user data on first load
   useEffect(() => {

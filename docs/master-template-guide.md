@@ -258,12 +258,12 @@ useEffect(() => {
     eventSource.close();
   };
 
-  return () => {
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close();
-    }
-  };
-}, [utils.internal.getUserData]);
+      return () => {
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+      }
+    };
+  }, []); // Empty dependency array - SSE connection should only be created once
 ```
 
 ### Required Event Handlers (Never Change)

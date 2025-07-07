@@ -70,7 +70,7 @@ const { mutate: sendToN8n } = clientApi.internal.sendToN8n.useMutation();
 useEffect(() => {
   const eventSource = new EventSource("/api/stream/user-updates");
   // ... SSE setup logic (copy exactly from n8n-demo)
-}, [utils.internal.getUserData]);
+}, []); // Empty dependency array - SSE connection should only be created once
 ```
 
 ### Form Generation Pattern

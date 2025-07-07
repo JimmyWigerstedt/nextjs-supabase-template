@@ -135,7 +135,7 @@ export function YourCustomPageClient() {
         eventSourceRef.current.close();
       }
     };
-  }, [utils.internal.getUserData]);
+  }, []); // Empty dependency array - SSE connection should only be created once
 
   // 🔒 NEVER CHANGE: Required handlers
   const handleUpdateData = () => {
