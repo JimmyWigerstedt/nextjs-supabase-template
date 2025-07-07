@@ -289,7 +289,7 @@ export function YourPageClient() {
         eventSourceRef.current.close();
       }
     };
-  }, [utils.internal.getUserData]);
+  }, []); // Empty dependency array - SSE connection should only be created once
 
   const handleUpdateData = () => {
     const updates: Record<string, string> = {};

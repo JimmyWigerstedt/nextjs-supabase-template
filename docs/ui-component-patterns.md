@@ -148,12 +148,12 @@ useEffect(() => {
     }, 5000);
   };
   
-  return () => {
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close();
-    }
-  };
-}, [utils.internal.getUserData]);
+          return () => {
+          if (eventSourceRef.current) {
+            eventSourceRef.current.close();
+          }
+        };
+      }, []); // Empty dependency array - SSE connection should only be created once
 
 // MECHANICS:
 // - Establishes persistent connection for real-time updates
@@ -487,7 +487,7 @@ export function NewPageClient() {
         eventSourceRef.current.close();
       }
     };
-  }, [utils.internal.getUserData]);
+  }, []); // Empty dependency array - SSE connection should only be created once
   
   // 5. Required helpers (copy exactly)
   const updateFieldInput = (fieldName: string, value: string) => {
