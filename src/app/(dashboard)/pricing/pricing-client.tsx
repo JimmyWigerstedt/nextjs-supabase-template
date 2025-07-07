@@ -27,7 +27,7 @@ export function PricingPageClient() {
       product.productName === name
     );
     return productEntry ? { id: productEntry[0], ...productEntry[1] } : null;
-  }).filter(Boolean);
+  }).filter((product): product is NonNullable<typeof product> => product !== null);
 
   return (
     <div className="space-y-8">

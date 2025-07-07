@@ -25,6 +25,208 @@ Look for these in the output:
 - ✅ **Collecting page data**
 - ✅ **Generating static pages**
 
+## TypeScript/ESLint Best Practices
+
+### Common Linting Errors and Solutions
+
+#### 1. Nullish Coalescing (`??` vs `||`)
+**❌ Avoid:**
+```typescript
+const value = someValue || 'default';
+```
+
+**✅ Prefer:**
+```typescript
+const value = someValue ?? 'default';
+```
+
+#### 2. Type-Only Imports
+**❌ Avoid:**
+```typescript
+import { SomeType } from './types';
+```
+
+**✅ Prefer:**
+```typescript
+import type { SomeType } from './types';
+```
+
+#### 3. Optional Chaining
+**❌ Avoid:**
+```typescript
+if (product && product.monthly && product.yearly) {
+  // ...
+}
+```
+
+**✅ Prefer:**
+```typescript
+if (product?.monthly && product?.yearly) {
+  // ...
+}
+```
+
+#### 4. Index Signatures vs Records
+**❌ Avoid:**
+```typescript
+type MyType = {
+  [key: string]: SomeValue;
+};
+```
+
+**✅ Prefer:**
+```typescript
+type MyType = Record<string, SomeValue>;
+```
+
+#### 5. Unused Variables
+**❌ Avoid:**
+```typescript
+const handleClick = (event, index) => {
+  // only using event, not index
+};
+```
+
+**✅ Prefer:**
+```typescript
+const handleClick = (event, _index) => {
+  // prefix unused args with underscore
+};
+```
+
+### Stripe Integration Best Practices
+
+#### 1. Product Type Handling
+When working with Stripe products, handle both `Product` and `DeletedProduct` types:
+```typescript
+productName: typeof price.product === 'string' ? '' : 
+             ('name' in price.product ? price.product.name : '')
+```
+
+#### 2. Null Safety for Stripe Data
+Always check for null/undefined in Stripe data:
+```typescript
+const displayPrice = price.unitAmount ? Math.floor(price.unitAmount / 100) : 0;
+```
+
+#### 3. Type Assertion with Non-Null Operator
+When you're certain an object exists (after null checks):
+```typescript
+if (!organized[price.productId]) {
+  organized[price.productId] = { productName: price.productName };
+}
+// Now safe to use non-null assertion
+organized[price.productId]!.monthly = price;
+```
+
+### Type Safety Patterns
+
+#### 1. Array Filtering with Type Guards
+**❌ Avoid:**
+```typescript
+const items = array.filter(Boolean);
+```
+
+**✅ Prefer:**
+```typescript
+const items = array.filter((item): item is NonNullable<typeof item> => item !== null);
+```
+
+#### 2. Environment Variable Validation
+Always validate environment variables exist before use:
+```typescript
+// In env.js, the @t3-oss/env-nextjs package handles this
+// But in build-temp.bat, ensure all required vars are set
+```
+
+#### 3. React Hook Dependencies
+Include all dependencies in useEffect:
+```typescript
+useEffect(() => {
+  // If using a function from tRPC or other contexts
+  someFunction();
+}, [someFunction]); // Include the function as dependency
+```
+
+### Import/Export Patterns
+
+#### 1. API Route Exports
+Only export HTTP methods from API routes:
+```typescript
+// ✅ Correct
+export async function GET(request: NextRequest) { /* ... */ }
+export async function POST(request: NextRequest) { /* ... */ }
+
+// ❌ Incorrect
+export const someUtilityFunction = () => { /* ... */ };
+```
+
+#### 2. Type Exports
+Export types separately from values:
+```typescript
+// types.ts
+export type BillingInterval = 'monthly' | 'yearly';
+
+// component.ts
+import type { BillingInterval } from './types';
+```
+
+#### 3. Re-exports
+When re-exporting, use explicit imports:
+```typescript
+// ✅ Preferred
+export { SomeFunction } from './utils';
+export type { SomeType } from './types';
+```
+
+### Client/Server Component Patterns
+
+#### 1. Client Components
+Always use `'use client'` at the top for interactive components:
+```typescript
+'use client';
+
+import { useState } from 'react';
+// ... component code
+```
+
+#### 2. Server Components
+For server components, use async functions and server-side APIs:
+```typescript
+// No 'use client' directive
+export default async function ServerComponent() {
+  const data = await serverApi.something.getData();
+  return <div>{/* ... */}</div>;
+}
+```
+
+### Error Handling Best Practices
+
+#### 1. tRPC Error Handling
+Use proper error typing in tRPC mutations:
+```typescript
+const mutation = clientApi.something.mutate.useMutation({
+  onSuccess: (data) => {
+    // data is properly typed
+  },
+  onError: (error) => {
+    // error is properly typed
+    console.error('Error:', error.message);
+  },
+});
+```
+
+#### 2. Async/Await Error Handling
+Always handle async errors:
+```typescript
+try {
+  await someAsyncOperation();
+} catch (error) {
+  console.error('Operation failed:', error);
+  // Handle error appropriately
+}
+```
+
 ## Real-Time Updates Architecture
 
 ### SSE (Server-Sent Events) Implementation
@@ -72,6 +274,9 @@ N8N_BASE_URL="https://placeholder-n8n-instance.railway.app"
 N8N_WEBHOOK_SECRET="placeholder-secure-shared-secret-at-least-32-characters-long"
 N8N_TIMEOUT=30000
 NC_SCHEMA="pjo77o6pg08pd9l"
+STRIPE_SECRET_KEY="sk_test_placeholder_stripe_secret_key_for_testing"
+STRIPE_WEBHOOK_SECRET="whsec_placeholder_stripe_webhook_secret_for_testing"
+BASE_URL="http://localhost:3000"
 ```
 
 ## Common TypeScript Issues

@@ -201,7 +201,8 @@ export async function getStripePrices() {
     productId:
       typeof price.product === 'string' ? price.product : price.product.id,
     productName:
-      typeof price.product === 'string' ? '' : price.product.name,
+      typeof price.product === 'string' ? '' : 
+      ('name' in price.product ? price.product.name : ''),
     unitAmount: price.unit_amount,
     currency: price.currency,
     interval: price.recurring?.interval,
@@ -241,16 +242,16 @@ export async function getOrganizedStripePrices(): Promise<OrganizedPrices> {
     }
 
     if (price.interval === 'month') {
-      organized[price.productId].monthly = price;
+      organized[price.productId]!.monthly = price;
     } else if (price.interval === 'year') {
-      organized[price.productId].yearly = price;
+      organized[price.productId]!.yearly = price;
     }
   });
 
   // Calculate savings for each product
   Object.keys(organized).forEach((productId) => {
     const product = organized[productId];
-    if (product.monthly && product.yearly) {
+    if (product && product.monthly && product.yearly) {
       product.savings = calculateSavings(product.monthly, product.yearly);
     }
   });
