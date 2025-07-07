@@ -1,4 +1,4 @@
-const { Pool } = require('pg');
+import { Pool } from 'pg';
 
 /**
  * @param {string} fieldName
@@ -56,13 +56,16 @@ async function addField(fieldName, fieldType = 'VARCHAR') {
   }
 }
 
-// Usage: node scripts/add-field.js fieldName [fieldType]
-const fieldName = process.argv[2];
-const fieldType = process.argv[3] || 'VARCHAR';
-
-if (!fieldName) {
+// Get command line arguments
+const args = process.argv.slice(2);
+if (args.length < 1) {
   console.error('Usage: node scripts/add-field.js <fieldName> [fieldType]');
   process.exit(1);
 }
 
-addField(fieldName, fieldType); 
+const [fieldName, fieldType = 'VARCHAR'] = args;
+if (!fieldName) {
+  console.error('Usage: node scripts/add-field.js <fieldName> [fieldType]');
+  process.exit(1);
+}
+await addField(fieldName, fieldType); 

@@ -28,6 +28,10 @@ export const env = createEnv({
     N8N_WEBHOOK_SECRET: z.string().min(32),
     N8N_TIMEOUT: z.coerce.number().default(30000),
     NC_SCHEMA: z.string().min(1),
+    // Stripe environment variables
+    STRIPE_SECRET_KEY: z.string(),
+    STRIPE_WEBHOOK_SECRET: z.string(),
+    BASE_URL: z.string().url(),
   },
 
   /**
@@ -54,6 +58,10 @@ export const env = createEnv({
     N8N_WEBHOOK_SECRET: process.env.N8N_WEBHOOK_SECRET,
     N8N_TIMEOUT: process.env.N8N_TIMEOUT,
     NC_SCHEMA: process.env.NC_SCHEMA,
+    // Stripe environment variables
+    STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY,
+    STRIPE_WEBHOOK_SECRET: process.env.STRIPE_WEBHOOK_SECRET,
+    BASE_URL: process.env.BASE_URL,
   },
   /**
    * Run `build` or `dev` with `SKIP_ENV_VALIDATION` to skip env validation. This is especially

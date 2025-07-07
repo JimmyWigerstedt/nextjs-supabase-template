@@ -1,4 +1,4 @@
-const { Pool } = require('pg');
+import { Pool } from 'pg';
 
 async function initializeInternalDatabase() {
   const dbUrl = process.env.INTERNAL_DATABASE_URL;
@@ -37,11 +37,48 @@ async function initializeInternalDatabase() {
         "test1" VARCHAR,
         "test2" VARCHAR,
         "created_at" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        "updated_at" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        "updated_at" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        "stripeCustomerId" VARCHAR,
+        "stripeSubscriptionId" VARCHAR,
+        "planName" VARCHAR,
+        "subscriptionStatus" VARCHAR
       )
     `);
     
     console.log('✅ userData table created successfully');
+    
+    // Add Stripe fields to existing table if they don't exist
+    console.log('🔄 Ensuring Stripe fields exist...');
+    const stripeFields = [
+      'stripeCustomerId',
+      'stripeSubscriptionId', 
+      'planName',
+      'subscriptionStatus'
+    ];
+    
+    for (const field of stripeFields) {
+      try {
+        // Check if field exists
+        const fieldCheck = await client.query(`
+          SELECT column_name 
+          FROM information_schema.columns 
+          WHERE table_schema = $1 AND table_name = 'userData' AND column_name = $2
+        `, [schema, field]);
+        
+        if (fieldCheck.rows.length === 0) {
+          // Field doesn't exist, add it
+          await client.query(`
+            ALTER TABLE "${schema}"."userData" 
+            ADD COLUMN "${field}" VARCHAR
+          `);
+          console.log(`✅ Added field: ${field}`);
+        } else {
+          console.log(`✅ Field already exists: ${field}`);
+        }
+      } catch (error) {
+        console.warn(`⚠️ Could not add field ${field}:`, error instanceof Error ? error.message : String(error));
+      }
+    }
     
     // Test the connection
     const result = await client.query(`SELECT COUNT(*) FROM "${schema}"."userData"`);
@@ -55,13 +92,8 @@ async function initializeInternalDatabase() {
     
   } catch (error) {
     console.error('❌ Database initialization failed:', error instanceof Error ? error.message : String(error));
-    console.log('\nTroubleshooting:');
-    console.log('1. Check your INTERNAL_DATABASE_URL is correct');
-    console.log('2. Ensure your database server is running');
-    console.log('3. Verify your database credentials');
     process.exit(1);
   }
 }
 
-// Run the initialization
 initializeInternalDatabase(); 
