@@ -64,13 +64,22 @@ export function SubmitButton({
 
   const scheduleDowngrade = clientApi.payments.scheduleDowngrade.useMutation({
     onSuccess: () => {
-      toast.success(`Downgrade to ${planName} scheduled for end of current period`);
+      // Check if this was an interval change (which would be immediate)
+      const isIntervalChange = comparison?.isSameProduct && !comparison?.isSameBillingCycle;
+      
+      if (isIntervalChange) {
+        const billingText = billingInterval === 'yearly' ? 'annual' : 'monthly';
+        toast.success(`Successfully switched to ${billingText} billing for ${planName}!`);
+      } else {
+        toast.success(`Downgrade to ${planName} scheduled for end of current period`);
+      }
+      
       setIsLoading(false);
       // Refresh the page to update subscription status
       window.location.reload();
     },
     onError: (error) => {
-      toast.error(`Failed to schedule downgrade: ${error.message}`);
+      toast.error(`Failed to process change: ${error.message}`);
       setIsLoading(false);
     },
   });
@@ -151,11 +160,24 @@ export function SubmitButton({
 
     // Downgrade
     if (comparison.isDowngrade) {
-      return { 
-        type: 'downgrade', 
-        label: 'Downgrade at Period End',
-        subtitle: comparison.priceDifference < 0 ? `Save $${Math.abs(comparison.priceDifference)}/mo` : undefined
-      };
+      // Check if this is actually an interval change
+      const isIntervalChange = comparison.isSameProduct && !comparison.isSameBillingCycle;
+      
+      if (isIntervalChange) {
+        const targetInterval = billingInterval === 'yearly' ? 'Annual' : 'Monthly';
+        const savings = comparison.priceDifference < 0 ? Math.abs(comparison.priceDifference) : 0;
+        return { 
+          type: 'downgrade', 
+          label: `Switch to ${targetInterval}`,
+          subtitle: savings > 0 ? `Save $${savings}/mo` : undefined
+        };
+      } else {
+        return { 
+          type: 'downgrade', 
+          label: 'Downgrade at Period End',
+          subtitle: comparison.priceDifference < 0 ? `Save $${Math.abs(comparison.priceDifference)}/mo` : undefined
+        };
+      }
     }
 
     // Default to manage

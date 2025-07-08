@@ -315,16 +315,16 @@ export async function handleSubscriptionChange(
       
       try {
         const result = await client.query(
-          `UPDATE "${env.NC_SCHEMA}"."userData" 
-           SET "stripeSubscriptionId" = $1, 
-               "planName" = $2,
-               "subscriptionStatus" = $3,
+        `UPDATE "${env.NC_SCHEMA}"."userData" 
+         SET "stripeSubscriptionId" = $1, 
+             "planName" = $2,
+             "subscriptionStatus" = $3,
                "priceId" = $4,
                "currentPeriodStart" = $5,
                "currentPeriodEnd" = $6,
                "trialEnd" = $7,
                "cancelAtPeriodEnd" = $8,
-               "updated_at" = CURRENT_TIMESTAMP
+             "updated_at" = CURRENT_TIMESTAMP
            WHERE "UID" = $9`,
           [
             subscriptionId, 
@@ -572,11 +572,20 @@ export async function compareSubscriptionPrices(userId: string, targetPriceId: s
   }
 
   const isSamePlan = currentPrice.id === targetPrice.id;
-  const isSameProduct = currentPrice.product === targetPrice.product || 
-    (typeof currentPrice.product === 'object' && currentPrice.product?.id === targetPrice.product) ||
-    (typeof targetPrice.product === 'object' && currentPrice.product === targetPrice.product.id);
   
+  // Get product IDs for comparison
+  const currentProductId = typeof currentPrice.product === 'string' 
+    ? currentPrice.product 
+    : currentPrice.product?.id;
+  const targetProductId = typeof targetPrice.product === 'string' 
+    ? targetPrice.product 
+    : targetPrice.product?.id;
+  
+  const isSameProduct = currentProductId === targetProductId;
   const isSameBillingCycle = currentPrice.recurring?.interval === targetPrice.recurring?.interval;
+  
+  console.log(`[compareSubscriptionPrices] Product comparison: current=${currentProductId}, target=${targetProductId}, same=${isSameProduct}`);
+  console.log(`[compareSubscriptionPrices] Billing cycle comparison: current=${currentPrice.recurring?.interval}, target=${targetPrice.recurring?.interval}, same=${isSameBillingCycle}`);
 
   // Calculate price difference (monthly normalized)
   const currentMonthlyAmount = currentPrice.recurring?.interval === 'year' 
@@ -626,16 +635,41 @@ export async function scheduleSubscriptionChange(userId: string, newPriceId: str
     throw new Error('No active subscription found');
   }
 
-  const subscription = await stripe.subscriptions.update(currentSub.subscription.id, {
-    items: [{
-      id: currentSub.subscription.items.data[0]?.id,
-      price: newPriceId,
-    }],
-    proration_behavior: 'none',
-    billing_cycle_anchor: 'unchanged',
-  });
+  // Get the target price to check if it's an interval change
+  const targetPrice = await stripe.prices.retrieve(newPriceId);
+  const currentPrice = currentSub.currentPrice;
+  
+  // Check if this is a billing interval change (monthly ↔ yearly)
+  const isIntervalChange = currentPrice?.recurring?.interval !== targetPrice.recurring?.interval;
+  
+  if (isIntervalChange) {
+    // For interval changes, we need to do an immediate upgrade since billing_cycle_anchor: 'unchanged' is not supported
+    console.log(`[scheduleSubscriptionChange] Interval change detected (${currentPrice?.recurring?.interval} → ${targetPrice.recurring?.interval}), performing immediate upgrade`);
+    
+    const subscription = await stripe.subscriptions.update(currentSub.subscription.id, {
+      items: [{
+        id: currentSub.subscription.items.data[0]?.id,
+        price: newPriceId,
+      }],
+      proration_behavior: 'create_prorations',
+    });
 
-  return subscription;
+    return subscription;
+  } else {
+    // For same-interval changes, schedule for end of period
+    console.log(`[scheduleSubscriptionChange] Same interval change, scheduling for end of period`);
+    
+    const subscription = await stripe.subscriptions.update(currentSub.subscription.id, {
+      items: [{
+        id: currentSub.subscription.items.data[0]?.id,
+        price: newPriceId,
+      }],
+      proration_behavior: 'none',
+      billing_cycle_anchor: 'unchanged',
+    });
+
+    return subscription;
+  }
 }
 
 export async function previewSubscriptionChange(userId: string, newPriceId: string) {
