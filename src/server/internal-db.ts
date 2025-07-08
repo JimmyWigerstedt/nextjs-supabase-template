@@ -76,7 +76,80 @@ export const ensureUidConstraintOnce = async () => {
   }
 };
 
-// Ensure UID constraint exists on app startup
+// Ensure Stripe subscription fields exist
+export const ensureStripeFieldsOnce = async () => {
+  console.log('[internal-db] Checking Stripe subscription fields...');
+  const client = await internalDb.connect();
+  
+  try {
+    // Define the Stripe fields that should exist
+    const stripeFields = [
+      'stripeCustomerId',
+      'stripeSubscriptionId', 
+      'planName',
+      'subscriptionStatus',
+      'currentPeriodStart',
+      'currentPeriodEnd',
+      'trialEnd',
+      'cancelAtPeriodEnd',
+      'priceId'
+    ];
+    
+    // Define field types for proper column creation
+    const getFieldType = (fieldName: string): string => {
+      switch (fieldName) {
+        case 'stripeCustomerId':
+        case 'stripeSubscriptionId':
+        case 'planName':
+        case 'subscriptionStatus':
+        case 'priceId':
+          return 'VARCHAR';
+        case 'currentPeriodStart':
+        case 'currentPeriodEnd':
+        case 'trialEnd':
+          return 'TIMESTAMP';
+        case 'cancelAtPeriodEnd':
+          return 'BOOLEAN DEFAULT FALSE';
+        default:
+          return 'VARCHAR';
+      }
+    };
+
+    for (const field of stripeFields) {
+      try {
+        // Check if field exists
+        const fieldCheck = await client.query(`
+          SELECT column_name 
+          FROM information_schema.columns 
+          WHERE table_schema = $1 AND table_name = 'userData' AND column_name = $2
+        `, [env.NC_SCHEMA, field]);
+        
+        if (fieldCheck.rows.length === 0) {
+          // Field doesn't exist, add it with proper type
+          const fieldType = getFieldType(field);
+          await client.query(`
+            ALTER TABLE "${env.NC_SCHEMA}"."userData" 
+            ADD COLUMN "${field}" ${fieldType}
+          `);
+          console.log(`[internal-db] ✅ Added field: ${field} (${fieldType})`);
+        } else {
+          console.log(`[internal-db] ✅ Field already exists: ${field}`);
+        }
+      } catch (error) {
+        console.warn(`[internal-db] ⚠️ Could not add field ${field}:`, error instanceof Error ? error.message : String(error));
+      }
+    }
+    
+    console.log('[internal-db] ✅ Stripe fields check complete');
+  } catch (error) {
+    console.error('[internal-db] ❌ Stripe fields check failed:', error instanceof Error ? error.message : String(error));
+  } finally {
+    client.release();
+  }
+};
+
+// Initialize database constraints and fields on app startup
 if (process.env.NODE_ENV !== 'test') {
   ensureUidConstraintOnce().catch(console.error);
+  ensureStripeFieldsOnce().catch(console.error);
 } 
