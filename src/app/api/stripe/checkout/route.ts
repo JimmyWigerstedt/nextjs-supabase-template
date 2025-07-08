@@ -94,21 +94,36 @@ export async function GET(request: NextRequest) {
     const trialEnd = (trialEndTs && typeof trialEndTs === 'number' && !isNaN(trialEndTs)) 
       ? new Date(trialEndTs * 1000) : null;
 
-    // Validate that the Date objects are valid
-    if (!currentPeriodStart || !currentPeriodEnd || isNaN(currentPeriodStart.getTime()) || isNaN(currentPeriodEnd.getTime())) {
-      console.error(`[checkout] ❌ Invalid period timestamps for subscription ${subscriptionId}`);
-      console.error(`[checkout] Raw values: start=${currentPeriodStartTs}, end=${currentPeriodEndTs}`);
-      throw new Error('Invalid subscription period timestamps');
+    // For trialing subscriptions, handle missing current period timestamps
+    if (subscription.status === 'trialing') {
+      console.log(`[checkout] Handling trialing subscription - period timestamps may be null`);
+      
+      // Validate trial end date if it exists
+      if (trialEnd && isNaN(trialEnd.getTime())) {
+        console.error(`[checkout] ❌ Invalid trial end timestamp for subscription ${subscriptionId}`);
+        console.error(`[checkout] Raw trial end: ${trialEndTs}`);
+        throw new Error('Invalid trial end timestamp');
+      }
+      
+      console.log(`[checkout] Trialing subscription will store: start=${currentPeriodStart?.toISOString() ?? 'null'}, end=${currentPeriodEnd?.toISOString() ?? 'null'}, trial=${trialEnd?.toISOString() ?? 'null'}`);
+      
+    } else {
+      // For non-trialing subscriptions, validate that we have valid period timestamps
+      if (!currentPeriodStart || !currentPeriodEnd || isNaN(currentPeriodStart.getTime()) || isNaN(currentPeriodEnd.getTime())) {
+        console.error(`[checkout] ❌ Invalid period timestamps for subscription ${subscriptionId}`);
+        console.error(`[checkout] Raw values: start=${currentPeriodStartTs}, end=${currentPeriodEndTs}`);
+        throw new Error('Invalid subscription period timestamps');
+      }
+      
+      // Validate trial end date if it exists
+      if (trialEnd && isNaN(trialEnd.getTime())) {
+        console.error(`[checkout] ❌ Invalid trial end timestamp for subscription ${subscriptionId}`);
+        console.error(`[checkout] Raw trial end: ${trialEndTs}`);
+        throw new Error('Invalid trial end timestamp');
+      }
     }
 
-    // Validate trial end date if it exists
-    if (trialEnd && isNaN(trialEnd.getTime())) {
-      console.error(`[checkout] ❌ Invalid trial end timestamp for subscription ${subscriptionId}`);
-      console.error(`[checkout] Raw trial end: ${trialEndTs}`);
-      throw new Error('Invalid trial end timestamp');
-    }
-
-    console.log(`[checkout] Converted timestamps - start: ${currentPeriodStart.toISOString()}, end: ${currentPeriodEnd.toISOString()}, trial: ${trialEnd?.toISOString() ?? 'null'}`);
+    console.log(`[checkout] Converted timestamps - start: ${currentPeriodStart?.toISOString() ?? 'null'}, end: ${currentPeriodEnd?.toISOString() ?? 'null'}, trial: ${trialEnd?.toISOString() ?? 'null'}`);
 
     // Update userData table with subscription information
     const client = await internalDb.connect();

@@ -249,12 +249,43 @@ export async function handleSubscriptionChange(
       const trialEnd = (trialEndTs && typeof trialEndTs === 'number' && !isNaN(trialEndTs)) 
         ? new Date(trialEndTs * 1000) : null;
 
-      // Validate that the Date objects are valid
-      if (!currentPeriodStart || !currentPeriodEnd || isNaN(currentPeriodStart.getTime()) || isNaN(currentPeriodEnd.getTime())) {
-        console.error(`[handleSubscriptionChange] ❌ Invalid period timestamps for subscription ${subscriptionId}`);
-        console.error(`[handleSubscriptionChange] Raw values: start=${currentPeriodStartTs}, end=${currentPeriodEndTs}`);
-        console.error(`[handleSubscriptionChange] Converted values: start=${currentPeriodStart?.toString() ?? 'null'}, end=${currentPeriodEnd?.toString() ?? 'null'}`);
-        throw new Error('Invalid subscription period timestamps');
+      // For trialing subscriptions, use different validation logic
+      if (status === 'trialing') {
+        console.log(`[handleSubscriptionChange] Handling trialing subscription - using trial period`);
+        
+        // For trialing subscriptions, we might not have current_period_start/end yet
+        // Use trial_start if available, otherwise set to null
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access
+        const trialStartTs = (subscription as any).trial_start;
+        const trialStart = (trialStartTs && typeof trialStartTs === 'number' && !isNaN(trialStartTs)) 
+          ? new Date(trialStartTs * 1000) : null;
+        
+        // For trialing, we'll use trial_start as period start and trial_end as period end if no current period is set
+        const effectivePeriodStart = currentPeriodStart ?? trialStart;
+        const effectivePeriodEnd = currentPeriodEnd ?? trialEnd;
+        
+        console.log(`[handleSubscriptionChange] Trial subscription - effective period: ${effectivePeriodStart?.toISOString() ?? 'null'} to ${effectivePeriodEnd?.toISOString() ?? 'null'}`);
+        
+        // Validate trial end date if it exists
+        if (trialEnd && isNaN(trialEnd.getTime())) {
+          console.error(`[handleSubscriptionChange] ❌ Invalid trial end timestamp for subscription ${subscriptionId}`);
+          console.error(`[handleSubscriptionChange] Raw trial end: ${trialEndTs}`);
+          console.error(`[handleSubscriptionChange] Converted trial end: ${trialEnd?.toString() ?? 'null'}`);
+          throw new Error('Invalid trial end timestamp');
+        }
+        
+        // Update the variables to use effective values
+        // Note: We'll use null for period start/end for trialing if not available
+        console.log(`[handleSubscriptionChange] Trialing subscription will store: start=${effectivePeriodStart?.toISOString() ?? 'null'}, end=${effectivePeriodEnd?.toISOString() ?? 'null'}, trial=${trialEnd?.toISOString() ?? 'null'}`);
+        
+      } else {
+        // For non-trialing subscriptions, validate that we have valid period timestamps
+        if (!currentPeriodStart || !currentPeriodEnd || isNaN(currentPeriodStart.getTime()) || isNaN(currentPeriodEnd.getTime())) {
+          console.error(`[handleSubscriptionChange] ❌ Invalid period timestamps for subscription ${subscriptionId}`);
+          console.error(`[handleSubscriptionChange] Raw values: start=${currentPeriodStartTs}, end=${currentPeriodEndTs}`);
+          console.error(`[handleSubscriptionChange] Converted values: start=${currentPeriodStart?.toString() ?? 'null'}, end=${currentPeriodEnd?.toString() ?? 'null'}`);
+          throw new Error('Invalid subscription period timestamps');
+        }
       }
       
       // Validate trial end date if it exists
@@ -265,7 +296,7 @@ export async function handleSubscriptionChange(
         throw new Error('Invalid trial end timestamp');
       }
       
-      console.log(`[handleSubscriptionChange] Converted timestamps - start: ${currentPeriodStart.toISOString()}, end: ${currentPeriodEnd.toISOString()}, trial: ${trialEnd?.toISOString() ?? 'null'}`);
+      console.log(`[handleSubscriptionChange] Converted timestamps - start: ${currentPeriodStart?.toISOString() ?? 'null'}, end: ${currentPeriodEnd?.toISOString() ?? 'null'}, trial: ${trialEnd?.toISOString() ?? 'null'}`);
       console.log(`[handleSubscriptionChange] Updating user ${userData.UID} with active subscription: ${productName} (${plan.id})`);
       
       // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access
@@ -275,8 +306,8 @@ export async function handleSubscriptionChange(
         productName,
         status,
         priceId: plan.id,
-        currentPeriodStart: currentPeriodStart.toISOString(),
-        currentPeriodEnd: currentPeriodEnd.toISOString(),
+        currentPeriodStart: currentPeriodStart?.toISOString() ?? null,
+        currentPeriodEnd: currentPeriodEnd?.toISOString() ?? null,
         trialEnd: trialEnd?.toISOString() ?? null,
         cancelAtPeriodEnd,
         userId: userData.UID
