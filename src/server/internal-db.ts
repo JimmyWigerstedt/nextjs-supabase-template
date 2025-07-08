@@ -29,7 +29,6 @@ const createInternalDbClient = () => {
 
 const globalForInternalDb = globalThis as unknown as {
   internalDb: ReturnType<typeof createInternalDbClient> | undefined;
-  stripeFieldsEnsured: boolean | undefined;
 };
 
 export const internalDb = globalForInternalDb.internalDb ?? createInternalDbClient();
@@ -45,21 +44,8 @@ internalDb.on('error', (err) => {
   console.error('[internal-db] Database pool error:', err);
 });
 
-// Check if we're in a build environment where database isn't available
-const isBuildEnvironment = () => {
-  return (
-    process.env.NODE_ENV === 'production' && 
-    (process.env.VERCEL_ENV === 'production' || process.env.RAILWAY_ENVIRONMENT === 'production')
-  ) || process.env.NEXT_PHASE === 'phase-production-build';
-};
-
 // Ensure UID constraint exists without creating tables
 export const ensureUidConstraintOnce = async () => {
-  if (isBuildEnvironment()) {
-    console.log('[internal-db] ⚠️ Skipping UID constraint check in build environment');
-    return;
-  }
-
   console.log('[internal-db] Checking UID constraint...');
   const client = await internalDb.connect();
   try {
@@ -90,18 +76,8 @@ export const ensureUidConstraintOnce = async () => {
   }
 };
 
-// Ensure Stripe subscription fields exist - LAZY EXECUTION
+// Ensure Stripe subscription fields exist
 export const ensureStripeFieldsOnce = async () => {
-  // Check if already ensured in this process
-  if (globalForInternalDb.stripeFieldsEnsured) {
-    return;
-  }
-
-  if (isBuildEnvironment()) {
-    console.log('[internal-db] ⚠️ Skipping Stripe fields check in build environment');
-    return;
-  }
-
   console.log('[internal-db] Checking Stripe subscription fields...');
   let client;
   
@@ -166,12 +142,9 @@ export const ensureStripeFieldsOnce = async () => {
       }
     }
     
-    // Mark as ensured for this process
-    globalForInternalDb.stripeFieldsEnsured = true;
     console.log('[internal-db] ✅ Stripe fields check complete');
   } catch (error) {
     console.error('[internal-db] ❌ Stripe fields check failed:', error instanceof Error ? error.message : String(error));
-    // Don't mark as ensured if it failed - allow retry on next request
   } finally {
     if (client) {
       client.release();
@@ -179,18 +152,21 @@ export const ensureStripeFieldsOnce = async () => {
   }
 };
 
-// Enhanced database connection with lazy field creation
-export const getInternalDbConnection = async () => {
-  // Ensure Stripe fields exist on first real database use
-  await ensureStripeFieldsOnce();
+// Run field creation 2 minutes after deployment
+// This ensures the app is fully running and database is accessible
+if (process.env.NODE_ENV !== 'test') {
+  console.log('[internal-db] 🚀 Scheduling field creation for 2 minutes after deployment...');
   
-  return internalDb.connect();
-};
-
-// Only run UID constraint check at startup if not in build environment
-if (process.env.NODE_ENV !== 'test' && !isBuildEnvironment()) {
-  // Only run UID constraint check at startup
-  ensureUidConstraintOnce().catch((error) => {
-    console.warn('[internal-db] ⚠️ UID constraint check failed at startup:', error instanceof Error ? error.message : String(error));
-  });
+  setTimeout(() => {
+    console.log('[internal-db] ⏰ Running post-deployment field creation...');
+    
+    Promise.all([
+      ensureUidConstraintOnce(),
+      ensureStripeFieldsOnce()
+    ]).then(() => {
+      console.log('[internal-db] 🎉 Post-deployment field creation completed successfully!');
+    }).catch((error) => {
+      console.error('[internal-db] ❌ Post-deployment field creation failed:', error instanceof Error ? error.message : String(error));
+    });
+  }, 2 * 60 * 1000); // 2 minutes in milliseconds
 } 

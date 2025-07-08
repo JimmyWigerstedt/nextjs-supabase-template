@@ -17,7 +17,7 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { env } from "~/env";
-import { getInternalDbConnection } from "~/server/internal-db";
+import { internalDb } from "~/server/internal-db";
 import { sendSSEUpdateToUser, getPendingUpdates } from "~/lib/sse-utils";
 
 export async function POST(request: NextRequest) {
@@ -85,7 +85,7 @@ export async function POST(request: NextRequest) {
     // Fetch current values from database (n8n already updated the database)
     const fetchedValues: Record<string, string> = {};
     try {
-      const client = await getInternalDbConnection();
+      const client = await internalDb.connect();
       try {
         const result = await client.query(
           `SELECT * FROM "${env.NC_SCHEMA}"."userData" WHERE "UID" = $1`,
