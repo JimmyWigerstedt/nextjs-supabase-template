@@ -33,6 +33,29 @@ export async function POST(request: NextRequest) {
         // If this is a subscription checkout, handle it
         if (session.mode === 'subscription' && session.subscription) {
           console.log(`[webhook] Fetching subscription ${String(session.subscription)} from checkout session`);
+          
+                  // First, ensure customer has proper metadata from the session
+        if (session.customer && session.client_reference_id) {
+          try {
+            // Handle customer ID (can be string or Customer object)
+            const customerId = typeof session.customer === 'string' ? session.customer : session.customer.id;
+            const customer = await stripe.customers.retrieve(customerId);
+            if (customer && !customer.deleted) {
+              // If customer doesn't have userId metadata, update it from session
+              if (!customer.metadata?.userId) {
+                console.log(`[webhook] Updating customer ${customerId} metadata with userId: ${session.client_reference_id}`);
+                await stripe.customers.update(customerId, {
+                  metadata: {
+                    userId: session.client_reference_id
+                  }
+                });
+              }
+            }
+          } catch (error) {
+            console.error(`[webhook] Failed to update customer metadata:`, error);
+          }
+        }
+          
           // Fetch the full subscription object
           const subscription = await stripe.subscriptions.retrieve(session.subscription as string);
           await handleSubscriptionChange(subscription);

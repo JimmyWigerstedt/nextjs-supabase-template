@@ -60,6 +60,32 @@ export async function createCheckoutSession({
     client.release();
   }
 
+  // Ensure we have a customer with proper metadata
+  let customerId = userData.stripeCustomerId;
+  
+  if (!customerId) {
+    // Create customer with metadata
+    const customer = await stripe.customers.create({
+      email: user.email,
+      metadata: {
+        userId: user.id
+      }
+    });
+    customerId = customer.id;
+    
+    // Update our database with the customer ID
+    const updateClient = await internalDb.connect();
+    try {
+      await updateClient.query(
+        `UPDATE "${env.NC_SCHEMA}"."userData" SET "stripeCustomerId" = $1 WHERE "UID" = $2`,
+        [customerId, user.id]
+      );
+      console.log(`[createCheckoutSession] Created and saved Stripe customer ${customerId} for user ${user.id}`);
+    } finally {
+      updateClient.release();
+    }
+  }
+
   const session = await stripe.checkout.sessions.create({
     payment_method_types: ['card'],
     line_items: [
@@ -71,7 +97,7 @@ export async function createCheckoutSession({
     mode: 'subscription',
     success_url: `${env.BASE_URL}/api/stripe/checkout?session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: `${env.BASE_URL}/pricing`,
-    customer: userData.stripeCustomerId ?? undefined,
+    customer: customerId,
     client_reference_id: user.id,
     allow_promotion_codes: true,
     subscription_data: {
