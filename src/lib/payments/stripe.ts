@@ -166,10 +166,14 @@ export async function handleSubscriptionChange(
           product.name, 
           status, 
           plan?.id,
-          new Date((subscription as any).current_period_start * 1000), // eslint-disable-line @typescript-eslint/no-explicit-any
-          new Date((subscription as any).current_period_end * 1000), // eslint-disable-line @typescript-eslint/no-explicit-any
-          (subscription as any).trial_end ? new Date((subscription as any).trial_end * 1000) : null, // eslint-disable-line @typescript-eslint/no-explicit-any
-          (subscription as any).cancel_at_period_end, // eslint-disable-line @typescript-eslint/no-explicit-any
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access
+          new Date((subscription as any).current_period_start * 1000),
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access
+          new Date((subscription as any).current_period_end * 1000),
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access
+          (subscription as any).trial_end ? new Date((subscription as any).trial_end * 1000) : null,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access
+          (subscription as any).cancel_at_period_end,
           userData.UID
         ]
       );

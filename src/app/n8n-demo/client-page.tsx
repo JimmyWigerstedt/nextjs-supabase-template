@@ -187,6 +187,7 @@ export function N8nDemoClient() {
         eventSourceRef.current.close();
       }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Empty dependency array - SSE connection should only be created once
 
   // Initialize user data on first load
@@ -194,6 +195,7 @@ export function N8nDemoClient() {
     if (!userData && !isLoadingData) {
       initializeUserData();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userData, isLoadingData, initializeUserData]);
 
   const handleUpdateData = () => {

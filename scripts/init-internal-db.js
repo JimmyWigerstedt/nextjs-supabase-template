@@ -62,16 +62,27 @@ async function initializeInternalDatabase() {
     ];
     
     // Define field types for proper column creation
-    const fieldTypes = {
-      'stripeCustomerId': 'VARCHAR',
-      'stripeSubscriptionId': 'VARCHAR',
-      'planName': 'VARCHAR',
-      'subscriptionStatus': 'VARCHAR',
-      'currentPeriodStart': 'TIMESTAMP',
-      'currentPeriodEnd': 'TIMESTAMP',
-      'trialEnd': 'TIMESTAMP',
-      'cancelAtPeriodEnd': 'BOOLEAN DEFAULT FALSE',
-      'priceId': 'VARCHAR'
+    /**
+     * @param {string} fieldName
+     * @returns {string}
+     */
+    const getFieldType = (fieldName) => {
+      switch (fieldName) {
+        case 'stripeCustomerId':
+        case 'stripeSubscriptionId':
+        case 'planName':
+        case 'subscriptionStatus':
+        case 'priceId':
+          return 'VARCHAR';
+        case 'currentPeriodStart':
+        case 'currentPeriodEnd':
+        case 'trialEnd':
+          return 'TIMESTAMP';
+        case 'cancelAtPeriodEnd':
+          return 'BOOLEAN DEFAULT FALSE';
+        default:
+          return 'VARCHAR';
+      }
     };
 
     for (const field of stripeFields) {
@@ -85,8 +96,7 @@ async function initializeInternalDatabase() {
         
         if (fieldCheck.rows.length === 0) {
           // Field doesn't exist, add it with proper type
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
-          const fieldType = fieldTypes[field] ?? 'VARCHAR';
+          const fieldType = getFieldType(field);
           await client.query(`
             ALTER TABLE "${schema}"."userData" 
             ADD COLUMN "${field}" ${fieldType}
