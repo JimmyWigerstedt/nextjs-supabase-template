@@ -14,7 +14,7 @@
 
 import { z } from "zod";
 import { createTRPCRouter, authorizedProcedure } from "~/server/api/trpc";
-import { internalDb } from "~/server/internal-db";
+import { internalDb, getInternalDbConnection } from "~/server/internal-db";
 import { env } from "~/env";
 
 // Type for user data from database - now flexible for any fields
@@ -174,7 +174,7 @@ export const internalRouter = createTRPCRouter({
       }
     }),
   getUserData: authorizedProcedure.query(async ({ ctx }) => {
-    const client = await internalDb.connect();
+    const client = await getInternalDbConnection();
     try {
       const result = await client.query(
         `SELECT * FROM "${env.NC_SCHEMA}"."userData" WHERE "UID" = $1`,
@@ -205,8 +205,8 @@ export const internalRouter = createTRPCRouter({
     .input(
       z.record(z.string(), z.string().optional())
     )
-    .mutation(async ({ input, ctx }) => {
-      const client = await internalDb.connect();
+          .mutation(async ({ input, ctx }) => {
+        const client = await getInternalDbConnection();
       try {
         console.log(`[updateUserData] Starting update for user ${ctx.supabaseUser!.id}`, {
           input,
@@ -254,7 +254,7 @@ export const internalRouter = createTRPCRouter({
     }),
 
   initializeUserData: authorizedProcedure.mutation(async ({ ctx }) => {
-    const client = await internalDb.connect();
+    const client = await getInternalDbConnection();
     try {
       const result = await client.query(
         `INSERT INTO "${env.NC_SCHEMA}"."userData" ("UID") 
