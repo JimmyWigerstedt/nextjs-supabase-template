@@ -155,6 +155,7 @@ export async function getUserByStripeCustomerId(customerId: string): Promise<Use
   }
 }
 
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
 export async function handleSubscriptionChange(
   subscription: Stripe.Subscription
 ) {
@@ -215,56 +216,100 @@ export async function handleSubscriptionChange(
         throw new Error('Subscription item has no price');
       }
 
-      if (!plan.product) {
-        console.error(`[handleSubscriptionChange] ❌ No product found in price for ${subscriptionId}`);
-        throw new Error('Price has no product');
+      // Get product information from subscription items (already available in webhook)
+      let productName = 'Unknown Plan';
+      if (typeof plan.product === 'string') {
+        console.log(`[handleSubscriptionChange] 🔄 Fetching product details for ${plan.product}`);
+        try {
+          const product = await stripe.products.retrieve(plan.product);
+          productName = product.name || 'Unknown Plan';
+        } catch (error) {
+          console.error(`[handleSubscriptionChange] ⚠️ Failed to fetch product ${plan.product}:`, error);
+          productName = 'Unknown Plan';
+        }
+      } else if (plan.product && 'name' in plan.product) {
+        productName = plan.product.name || 'Unknown Plan';
       }
-
-             console.log(`[handleSubscriptionChange] 🔄 Fetching product details for ${String(plan.product)}`);
-      const product = await stripe.products.retrieve(plan.product as string);
       
-             // Validate timestamps exist and are valid
-       // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access
-       const currentPeriodStart = (subscription as any).current_period_start ? new Date((subscription as any).current_period_start * 1000) : null;
-       // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access
-       const currentPeriodEnd = (subscription as any).current_period_end ? new Date((subscription as any).current_period_end * 1000) : null;
-       // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access
-       const trialEnd = (subscription as any).trial_end ? new Date((subscription as any).trial_end * 1000) : null;
+      // Access timestamps directly from subscription object using type assertion
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access
+      const currentPeriodStartTs = (subscription as any).current_period_start;
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access
+      const currentPeriodEndTs = (subscription as any).current_period_end;
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access
+      const trialEndTs = (subscription as any).trial_end;
+      
+      console.log(`[handleSubscriptionChange] Raw timestamps - start: ${currentPeriodStartTs}, end: ${currentPeriodEndTs}, trial: ${trialEndTs}`);
+      
+      const currentPeriodStart = currentPeriodStartTs ? new Date(currentPeriodStartTs * 1000) : null;
+      const currentPeriodEnd = currentPeriodEndTs ? new Date(currentPeriodEndTs * 1000) : null;
+      const trialEnd = trialEndTs ? new Date(trialEndTs * 1000) : null;
 
       if (!currentPeriodStart || !currentPeriodEnd) {
         console.error(`[handleSubscriptionChange] ❌ Invalid period timestamps for subscription ${subscriptionId}`);
+        console.error(`[handleSubscriptionChange] Raw values: start=${currentPeriodStartTs}, end=${currentPeriodEndTs}`);
         throw new Error('Invalid subscription period timestamps');
       }
       
-      console.log(`[handleSubscriptionChange] Updating user ${userData.UID} with active subscription: ${product.name} (${plan.id})`);
+      console.log(`[handleSubscriptionChange] Converted timestamps - start: ${currentPeriodStart.toISOString()}, end: ${currentPeriodEnd.toISOString()}, trial: ${trialEnd?.toISOString() ?? 'null'}`);
+      console.log(`[handleSubscriptionChange] Updating user ${userData.UID} with active subscription: ${productName} (${plan.id})`);
       
-      await client.query(
-        `UPDATE "${env.NC_SCHEMA}"."userData" 
-         SET "stripeSubscriptionId" = $1, 
-             "planName" = $2,
-             "subscriptionStatus" = $3,
-             "priceId" = $4,
-             "currentPeriodStart" = $5,
-             "currentPeriodEnd" = $6,
-             "trialEnd" = $7,
-             "cancelAtPeriodEnd" = $8,
-             "updated_at" = CURRENT_TIMESTAMP
-         WHERE "UID" = $9`,
-        [
-          subscriptionId, 
-          product.name, 
-          status, 
-          plan.id,
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access
+      const cancelAtPeriodEnd = (subscription as any).cancel_at_period_end ?? false;
+      console.log(`[handleSubscriptionChange] Database params:`, {
+        subscriptionId,
+        productName,
+        status,
+        priceId: plan.id,
+        currentPeriodStart: currentPeriodStart.toISOString(),
+        currentPeriodEnd: currentPeriodEnd.toISOString(),
+        trialEnd: trialEnd?.toISOString() ?? null,
+        cancelAtPeriodEnd,
+        userId: userData.UID
+      });
+      
+      try {
+        const result = await client.query(
+          `UPDATE "${env.NC_SCHEMA}"."userData" 
+           SET "stripeSubscriptionId" = $1, 
+               "planName" = $2,
+               "subscriptionStatus" = $3,
+               "priceId" = $4,
+               "currentPeriodStart" = $5,
+               "currentPeriodEnd" = $6,
+               "trialEnd" = $7,
+               "cancelAtPeriodEnd" = $8,
+               "updated_at" = CURRENT_TIMESTAMP
+           WHERE "UID" = $9`,
+          [
+            subscriptionId, 
+            productName, 
+            status, 
+            plan.id,
+            currentPeriodStart,
+            currentPeriodEnd,
+            trialEnd,
+            cancelAtPeriodEnd,
+            userData.UID
+          ]
+        );
+        
+        console.log(`[handleSubscriptionChange] ✅ Successfully updated active subscription for user ${userData.UID}. Rows affected: ${result.rowCount}`);
+      } catch (dbError: unknown) {
+        console.error(`[handleSubscriptionChange] ❌ Database update failed for user ${userData.UID}:`, dbError);
+        console.error(`[handleSubscriptionChange] Query params:`, {
+          subscriptionId,
+          productName,
+          status,
+          priceId: plan.id,
           currentPeriodStart,
           currentPeriodEnd,
           trialEnd,
-                     // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access
-           (subscription as any).cancel_at_period_end || false,
-          userData.UID
-        ]
-      );
-      
-      console.log(`[handleSubscriptionChange] ✅ Successfully updated active subscription for user ${userData.UID}`);
+          cancelAtPeriodEnd,
+          userId: userData.UID
+        });
+        throw dbError;
+      }
     } else if (status === 'canceled' || status === 'unpaid') {
       console.log(`[handleSubscriptionChange] Clearing subscription data for user ${userData.UID}, status: ${status}`);
       
@@ -287,13 +332,14 @@ export async function handleSubscriptionChange(
     } else {
       console.log(`[handleSubscriptionChange] ⚠️ Unhandled subscription status: ${status} for user ${userData.UID}`);
     }
-  } catch (error) {
+  } catch (error: unknown) {
     console.error(`[handleSubscriptionChange] ❌ Database update failed for user ${userData.UID}:`, error);
     throw error;
   } finally {
     client.release();
   }
 }
+/* eslint-enable @typescript-eslint/no-unsafe-assignment */
 
 export async function handleCustomerCreated(customer: Stripe.Customer) {
   if (!customer.metadata?.userId) {
