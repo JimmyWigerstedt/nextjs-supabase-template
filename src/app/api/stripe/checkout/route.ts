@@ -52,6 +52,64 @@ export async function GET(request: NextRequest) {
       throw new Error("No user ID found in session's client_reference_id.");
     }
 
+    // Ensure user exists in database
+    const userCheckClient = await internalDb.connect();
+    try {
+      const userCheck = await userCheckClient.query(
+        `SELECT "UID" FROM "${env.NC_SCHEMA}"."userData" WHERE "UID" = $1`,
+        [userId]
+      );
+      
+      if (userCheck.rows.length === 0) {
+        // Create user record if it doesn't exist
+        console.log(`[checkout] Creating user record for UID: ${userId}`);
+        await userCheckClient.query(
+          `INSERT INTO "${env.NC_SCHEMA}"."userData" ("UID", "created_at", "updated_at") 
+           VALUES ($1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+           ON CONFLICT ("UID") DO NOTHING`,
+          [userId]
+        );
+      }
+    } finally {
+      userCheckClient.release();
+    }
+
+    // Safely convert timestamps with validation
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access
+    const currentPeriodStartTs = (subscription as any).current_period_start;
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access
+    const currentPeriodEndTs = (subscription as any).current_period_end;
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access
+    const trialEndTs = (subscription as any).trial_end;
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access
+    const cancelAtPeriodEnd = (subscription as any).cancel_at_period_end ?? false;
+
+    console.log(`[checkout] Raw timestamps - start: ${currentPeriodStartTs}, end: ${currentPeriodEndTs}, trial: ${trialEndTs}`);
+
+    // Validate and convert timestamps safely
+    const currentPeriodStart = (currentPeriodStartTs && typeof currentPeriodStartTs === 'number' && !isNaN(currentPeriodStartTs)) 
+      ? new Date(currentPeriodStartTs * 1000) : null;
+    const currentPeriodEnd = (currentPeriodEndTs && typeof currentPeriodEndTs === 'number' && !isNaN(currentPeriodEndTs)) 
+      ? new Date(currentPeriodEndTs * 1000) : null;
+    const trialEnd = (trialEndTs && typeof trialEndTs === 'number' && !isNaN(trialEndTs)) 
+      ? new Date(trialEndTs * 1000) : null;
+
+    // Validate that the Date objects are valid
+    if (!currentPeriodStart || !currentPeriodEnd || isNaN(currentPeriodStart.getTime()) || isNaN(currentPeriodEnd.getTime())) {
+      console.error(`[checkout] ❌ Invalid period timestamps for subscription ${subscriptionId}`);
+      console.error(`[checkout] Raw values: start=${currentPeriodStartTs}, end=${currentPeriodEndTs}`);
+      throw new Error('Invalid subscription period timestamps');
+    }
+
+    // Validate trial end date if it exists
+    if (trialEnd && isNaN(trialEnd.getTime())) {
+      console.error(`[checkout] ❌ Invalid trial end timestamp for subscription ${subscriptionId}`);
+      console.error(`[checkout] Raw trial end: ${trialEndTs}`);
+      throw new Error('Invalid trial end timestamp');
+    }
+
+    console.log(`[checkout] Converted timestamps - start: ${currentPeriodStart.toISOString()}, end: ${currentPeriodEnd.toISOString()}, trial: ${trialEnd?.toISOString() ?? 'null'}`);
+
     // Update userData table with subscription information
     const client = await internalDb.connect();
     try {
@@ -78,14 +136,10 @@ export async function GET(request: NextRequest) {
           product.name, 
           subscription.status,
           plan.id,
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access
-          new Date((subscription as any).current_period_start * 1000),
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access  
-          new Date((subscription as any).current_period_end * 1000),
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access
-          (subscription as any).trial_end ? new Date((subscription as any).trial_end * 1000) : null,
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access
-          (subscription as any).cancel_at_period_end
+          currentPeriodStart,
+          currentPeriodEnd,
+          trialEnd,
+          cancelAtPeriodEnd
         ]
       );
     } finally {

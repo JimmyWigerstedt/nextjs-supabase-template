@@ -241,14 +241,28 @@ export async function handleSubscriptionChange(
       
       console.log(`[handleSubscriptionChange] Raw timestamps - start: ${currentPeriodStartTs}, end: ${currentPeriodEndTs}, trial: ${trialEndTs}`);
       
-      const currentPeriodStart = currentPeriodStartTs ? new Date(currentPeriodStartTs * 1000) : null;
-      const currentPeriodEnd = currentPeriodEndTs ? new Date(currentPeriodEndTs * 1000) : null;
-      const trialEnd = trialEndTs ? new Date(trialEndTs * 1000) : null;
+      // Validate and convert timestamps safely
+      const currentPeriodStart = (currentPeriodStartTs && typeof currentPeriodStartTs === 'number' && !isNaN(currentPeriodStartTs)) 
+        ? new Date(currentPeriodStartTs * 1000) : null;
+      const currentPeriodEnd = (currentPeriodEndTs && typeof currentPeriodEndTs === 'number' && !isNaN(currentPeriodEndTs)) 
+        ? new Date(currentPeriodEndTs * 1000) : null;
+      const trialEnd = (trialEndTs && typeof trialEndTs === 'number' && !isNaN(trialEndTs)) 
+        ? new Date(trialEndTs * 1000) : null;
 
-      if (!currentPeriodStart || !currentPeriodEnd) {
+      // Validate that the Date objects are valid
+      if (!currentPeriodStart || !currentPeriodEnd || isNaN(currentPeriodStart.getTime()) || isNaN(currentPeriodEnd.getTime())) {
         console.error(`[handleSubscriptionChange] ❌ Invalid period timestamps for subscription ${subscriptionId}`);
         console.error(`[handleSubscriptionChange] Raw values: start=${currentPeriodStartTs}, end=${currentPeriodEndTs}`);
+        console.error(`[handleSubscriptionChange] Converted values: start=${currentPeriodStart?.toString() ?? 'null'}, end=${currentPeriodEnd?.toString() ?? 'null'}`);
         throw new Error('Invalid subscription period timestamps');
+      }
+      
+      // Validate trial end date if it exists
+      if (trialEnd && isNaN(trialEnd.getTime())) {
+        console.error(`[handleSubscriptionChange] ❌ Invalid trial end timestamp for subscription ${subscriptionId}`);
+        console.error(`[handleSubscriptionChange] Raw trial end: ${trialEndTs}`);
+        console.error(`[handleSubscriptionChange] Converted trial end: ${trialEnd?.toString() ?? 'null'}`);
+        throw new Error('Invalid trial end timestamp');
       }
       
       console.log(`[handleSubscriptionChange] Converted timestamps - start: ${currentPeriodStart.toISOString()}, end: ${currentPeriodEnd.toISOString()}, trial: ${trialEnd?.toISOString() ?? 'null'}`);
