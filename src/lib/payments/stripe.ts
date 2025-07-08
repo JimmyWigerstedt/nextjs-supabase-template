@@ -136,18 +136,81 @@ export async function handleSubscriptionChange(
   const subscriptionId = subscription.id;
   const status = subscription.status;
 
+  console.log(`[handleSubscriptionChange] Processing subscription ${subscriptionId} for customer ${customerId}, status: ${status}`);
+
+  // Add validation for required data
+  if (!customerId || !subscriptionId) {
+    console.error(`[handleSubscriptionChange] ❌ Missing required data: customerId=${customerId}, subscriptionId=${subscriptionId}`);
+    throw new Error('Missing required subscription data');
+  }
+
   const userData = await getUserByStripeCustomerId(customerId);
 
   if (!userData) {
-    console.error('User not found for Stripe customer:', customerId);
-    return;
+    console.error(`[handleSubscriptionChange] ❌ User not found for Stripe customer: ${customerId}`);
+    console.error(`[handleSubscriptionChange] This might indicate customer.created event was not processed or timing issue`);
+    
+    // For customer.subscription.created events, try to fetch customer from Stripe and create user record
+    try {
+      const customer = await stripe.customers.retrieve(customerId);
+      if (customer && !customer.deleted && customer.metadata?.userId) {
+        console.log(`[handleSubscriptionChange] 🔄 Found customer in Stripe with userId: ${customer.metadata.userId}, creating user record`);
+        await handleCustomerCreated(customer);
+        
+        // Retry getting user data
+        const retryUserData = await getUserByStripeCustomerId(customerId);
+        if (retryUserData) {
+          console.log(`[handleSubscriptionChange] ✅ Successfully created and retrieved user ${retryUserData.UID}`);
+          // Continue processing with the newly created user data
+          return handleSubscriptionChange(subscription);
+        }
+      }
+    } catch (error) {
+      console.error(`[handleSubscriptionChange] ❌ Failed to create missing user record:`, error);
+    }
+    
+    throw new Error(`Customer ${customerId} not found in database and could not be created`);
   }
+
+  console.log(`[handleSubscriptionChange] Found user ${userData.UID} for customer ${customerId}`);
 
   const client = await internalDb.connect();
   try {
     if (status === 'active' || status === 'trialing') {
+      // Validate subscription items exist
+      if (!subscription.items?.data || subscription.items.data.length === 0) {
+        console.error(`[handleSubscriptionChange] ❌ No subscription items found for subscription ${subscriptionId}`);
+        throw new Error('Subscription has no items');
+      }
+
       const plan = subscription.items.data[0]?.price;
-      const product = await stripe.products.retrieve(plan?.product as string);
+      if (!plan) {
+        console.error(`[handleSubscriptionChange] ❌ No price found in subscription items for ${subscriptionId}`);
+        throw new Error('Subscription item has no price');
+      }
+
+      if (!plan.product) {
+        console.error(`[handleSubscriptionChange] ❌ No product found in price for ${subscriptionId}`);
+        throw new Error('Price has no product');
+      }
+
+             console.log(`[handleSubscriptionChange] 🔄 Fetching product details for ${String(plan.product)}`);
+      const product = await stripe.products.retrieve(plan.product as string);
+      
+             // Validate timestamps exist and are valid
+       // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access
+       const currentPeriodStart = (subscription as any).current_period_start ? new Date((subscription as any).current_period_start * 1000) : null;
+       // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access
+       const currentPeriodEnd = (subscription as any).current_period_end ? new Date((subscription as any).current_period_end * 1000) : null;
+       // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access
+       const trialEnd = (subscription as any).trial_end ? new Date((subscription as any).trial_end * 1000) : null;
+
+      if (!currentPeriodStart || !currentPeriodEnd) {
+        console.error(`[handleSubscriptionChange] ❌ Invalid period timestamps for subscription ${subscriptionId}`);
+        throw new Error('Invalid subscription period timestamps');
+      }
+      
+      console.log(`[handleSubscriptionChange] Updating user ${userData.UID} with active subscription: ${product.name} (${plan.id})`);
       
       await client.query(
         `UPDATE "${env.NC_SCHEMA}"."userData" 
@@ -165,19 +228,20 @@ export async function handleSubscriptionChange(
           subscriptionId, 
           product.name, 
           status, 
-          plan?.id,
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access
-          new Date((subscription as any).current_period_start * 1000),
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access
-          new Date((subscription as any).current_period_end * 1000),
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access
-          (subscription as any).trial_end ? new Date((subscription as any).trial_end * 1000) : null,
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access
-          (subscription as any).cancel_at_period_end,
+          plan.id,
+          currentPeriodStart,
+          currentPeriodEnd,
+          trialEnd,
+                     // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access
+           (subscription as any).cancel_at_period_end || false,
           userData.UID
         ]
       );
+      
+      console.log(`[handleSubscriptionChange] ✅ Successfully updated active subscription for user ${userData.UID}`);
     } else if (status === 'canceled' || status === 'unpaid') {
+      console.log(`[handleSubscriptionChange] Clearing subscription data for user ${userData.UID}, status: ${status}`);
+      
       await client.query(
         `UPDATE "${env.NC_SCHEMA}"."userData" 
          SET "stripeSubscriptionId" = NULL, 
@@ -192,7 +256,14 @@ export async function handleSubscriptionChange(
          WHERE "UID" = $2`,
         [status, userData.UID]
       );
+      
+      console.log(`[handleSubscriptionChange] ✅ Successfully cleared subscription for user ${userData.UID}`);
+    } else {
+      console.log(`[handleSubscriptionChange] ⚠️ Unhandled subscription status: ${status} for user ${userData.UID}`);
     }
+  } catch (error) {
+    console.error(`[handleSubscriptionChange] ❌ Database update failed for user ${userData.UID}:`, error);
+    throw error;
   } finally {
     client.release();
   }
