@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Check } from 'lucide-react';
+import { Check, Crown, Clock, AlertCircle } from 'lucide-react';
 import { BillingToggle, type BillingInterval } from '~/components/ui/billing-toggle';
 import { SubmitButton } from './submit-button';
 import { clientApi } from "~/trpc/react";
@@ -11,6 +11,7 @@ export function PricingPageClient() {
   const [billingInterval, setBillingInterval] = useState<BillingInterval>('monthly');
   
   const { data: organizedPrices, isLoading } = clientApi.payments.getOrganizedStripePrices.useQuery();
+  const { data: currentSubscription } = clientApi.payments.getCurrentSubscription.useQuery();
 
   if (isLoading) {
     return <PricingPageSkeleton />;
@@ -31,6 +32,11 @@ export function PricingPageClient() {
 
   return (
     <div className="space-y-8">
+      {/* Current Subscription Status */}
+      {currentSubscription && (
+        <CurrentSubscriptionStatus subscription={currentSubscription} />
+      )}
+
       {/* Billing Toggle */}
       <div className="flex justify-center">
         <BillingToggle
@@ -47,6 +53,7 @@ export function PricingPageClient() {
             product={product}
             billingInterval={billingInterval}
             popular={product.productName === 'Plus'}
+            currentSubscription={currentSubscription}
           />
         ))}
       </div>
@@ -73,9 +80,85 @@ interface PricingCardProps {
   };
   billingInterval: BillingInterval;
   popular: boolean;
+  currentSubscription?: any;
 }
 
-function PricingCard({ product, billingInterval, popular }: PricingCardProps) {
+function CurrentSubscriptionStatus({ subscription }: { subscription: any }) {
+  const getStatusIcon = () => {
+    switch (subscription.subscriptionStatus) {
+      case 'active':
+        return <Crown className="h-5 w-5 text-green-600" />;
+      case 'trialing':
+        return <Clock className="h-5 w-5 text-blue-600" />;
+      case 'past_due':
+      case 'canceled':
+        return <AlertCircle className="h-5 w-5 text-red-600" />;
+      default:
+        return <Crown className="h-5 w-5 text-gray-600" />;
+    }
+  };
+
+  const getStatusText = () => {
+    switch (subscription.subscriptionStatus) {
+      case 'active':
+        return 'Active';
+      case 'trialing':
+        const trialEnd = subscription.trialEnd ? new Date(subscription.trialEnd) : null;
+        const daysLeft = trialEnd ? Math.ceil((trialEnd.getTime() - Date.now()) / (1000 * 60 * 60 * 24)) : 0;
+        return `Trial (${daysLeft} days left)`;
+      case 'past_due':
+        return 'Past Due';
+      case 'canceled':
+        return 'Canceled';
+      default:
+        return subscription.subscriptionStatus;
+    }
+  };
+
+  const getStatusColor = () => {
+    switch (subscription.subscriptionStatus) {
+      case 'active':
+        return 'text-green-600 bg-green-50 border-green-200';
+      case 'trialing':
+        return 'text-blue-600 bg-blue-50 border-blue-200';
+      case 'past_due':
+      case 'canceled':
+        return 'text-red-600 bg-red-50 border-red-200';
+      default:
+        return 'text-gray-600 bg-gray-50 border-gray-200';
+    }
+  };
+
+  const nextBillingDate = subscription.currentPeriodEnd ? new Date(subscription.currentPeriodEnd).toLocaleDateString() : null;
+
+  return (
+    <div className={`rounded-lg border-2 p-6 ${getStatusColor()}`}>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center space-x-3">
+          {getStatusIcon()}
+          <div>
+            <h3 className="font-semibold text-lg">{subscription.planName} Plan</h3>
+            <p className="text-sm opacity-80">{getStatusText()}</p>
+          </div>
+        </div>
+        <div className="text-right">
+          {nextBillingDate && (
+            <p className="text-sm">
+              Next billing: {nextBillingDate}
+            </p>
+          )}
+          {subscription.cancelAtPeriodEnd && (
+            <p className="text-sm text-red-600 font-medium">
+              Cancels at period end
+            </p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PricingCard({ product, billingInterval, popular, currentSubscription }: PricingCardProps) {
   const currentPrice = billingInterval === 'yearly' ? product.yearly : product.monthly;
   const fallbackPrice = product.monthly ?? product.yearly;
   const price = currentPrice ?? fallbackPrice;
@@ -96,13 +179,25 @@ function PricingCard({ product, billingInterval, popular }: PricingCardProps) {
   // Features for each plan
   const features = getFeatures(product.productName);
 
+  // Check if this is the user's current plan
+  const isCurrentPlan = currentSubscription?.planName === product.productName;
+
   return (
     <div className={`relative rounded-lg border-2 p-8 ${
-      popular 
-        ? 'border-blue-500 bg-blue-50' 
-        : 'border-gray-200 bg-white'
+      isCurrentPlan
+        ? 'border-green-500 bg-green-50'
+        : popular 
+          ? 'border-blue-500 bg-blue-50' 
+          : 'border-gray-200 bg-white'
     }`}>
-      {popular && (
+      {isCurrentPlan && (
+        <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
+          <span className="bg-green-500 text-white px-3 py-1 rounded-full text-sm font-medium">
+            Current Plan
+          </span>
+        </div>
+      )}
+      {!isCurrentPlan && popular && (
         <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
           <span className="bg-blue-500 text-white px-3 py-1 rounded-full text-sm font-medium">
             Most Popular
@@ -113,7 +208,7 @@ function PricingCard({ product, billingInterval, popular }: PricingCardProps) {
       {/* Savings badge for yearly billing */}
       {billingInterval === 'yearly' && product.savings && product.savings > 0 && (
         <div className="absolute -top-3 -right-3">
-          <span className="bg-green-500 text-white px-2 py-1 rounded-full text-xs font-medium">
+          <span className="bg-orange-500 text-white px-2 py-1 rounded-full text-xs font-medium">
             Save {product.savings}%
           </span>
         </div>

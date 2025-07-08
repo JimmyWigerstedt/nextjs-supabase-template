@@ -17,6 +17,11 @@ type UserData = {
   stripeSubscriptionId?: string;
   planName?: string;
   subscriptionStatus?: string;
+  currentPeriodStart?: string;
+  currentPeriodEnd?: string;
+  trialEnd?: string;
+  cancelAtPeriodEnd?: boolean;
+  priceId?: string;
 } & Record<string, string | undefined>;
 
 export async function createCheckoutSession({
@@ -149,9 +154,24 @@ export async function handleSubscriptionChange(
          SET "stripeSubscriptionId" = $1, 
              "planName" = $2,
              "subscriptionStatus" = $3,
+             "priceId" = $4,
+             "currentPeriodStart" = $5,
+             "currentPeriodEnd" = $6,
+             "trialEnd" = $7,
+             "cancelAtPeriodEnd" = $8,
              "updated_at" = CURRENT_TIMESTAMP
-         WHERE "UID" = $4`,
-        [subscriptionId, product.name, status, userData.UID]
+         WHERE "UID" = $9`,
+        [
+          subscriptionId, 
+          product.name, 
+          status, 
+          plan?.id,
+          new Date((subscription as any).current_period_start * 1000), // eslint-disable-line @typescript-eslint/no-explicit-any
+          new Date((subscription as any).current_period_end * 1000), // eslint-disable-line @typescript-eslint/no-explicit-any
+          (subscription as any).trial_end ? new Date((subscription as any).trial_end * 1000) : null, // eslint-disable-line @typescript-eslint/no-explicit-any
+          (subscription as any).cancel_at_period_end, // eslint-disable-line @typescript-eslint/no-explicit-any
+          userData.UID
+        ]
       );
     } else if (status === 'canceled' || status === 'unpaid') {
       await client.query(
@@ -159,6 +179,11 @@ export async function handleSubscriptionChange(
          SET "stripeSubscriptionId" = NULL, 
              "planName" = NULL,
              "subscriptionStatus" = $1,
+             "priceId" = NULL,
+             "currentPeriodStart" = NULL,
+             "currentPeriodEnd" = NULL,
+             "trialEnd" = NULL,
+             "cancelAtPeriodEnd" = FALSE,
              "updated_at" = CURRENT_TIMESTAMP
          WHERE "UID" = $2`,
         [status, userData.UID]
@@ -281,4 +306,161 @@ export async function getStripeProducts() {
         ? product.default_price
         : product.default_price?.id
   }));
+}
+
+// Enhanced subscription management functions
+
+export async function getCurrentSubscription(userId: string) {
+  const client = await internalDb.connect();
+  try {
+    const result = await client.query(
+      `SELECT * FROM "${env.NC_SCHEMA}"."userData" WHERE "UID" = $1`,
+      [userId]
+    );
+
+    if (result.rows.length === 0) {
+      return null;
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+    const userData = result.rows[0] as UserData;
+    
+    // If user has no active subscription, return null
+    if (!userData.stripeSubscriptionId) {
+      return null;
+    }
+
+    // Fetch fresh subscription data from Stripe
+    const subscription = await stripe.subscriptions.retrieve(userData.stripeSubscriptionId, {
+      expand: ['items.data.price.product']
+    });
+
+    return {
+      ...userData,
+      subscription,
+      currentPrice: subscription.items.data[0]?.price,
+      currentProduct: subscription.items.data[0]?.price.product
+    };
+  } finally {
+    client.release();
+  }
+}
+
+export async function compareSubscriptionPrices(userId: string, targetPriceId: string) {
+  const currentSub = await getCurrentSubscription(userId);
+  
+  if (!currentSub?.subscription) {
+    return {
+      isUpgrade: false,
+      isDowngrade: false,
+      isSamePlan: false,
+      isSameBillingCycle: false,
+      priceDifference: 0,
+      currentPrice: null,
+      targetPrice: null
+    };
+  }
+
+  const targetPrice = await stripe.prices.retrieve(targetPriceId, {
+    expand: ['product']
+  });
+
+  const currentPrice = currentSub.currentPrice;
+  
+  if (!currentPrice) {
+    return {
+      isUpgrade: false,
+      isDowngrade: false,
+      isSamePlan: false,
+      isSameBillingCycle: false,
+      priceDifference: 0,
+      currentPrice: null,
+      targetPrice
+    };
+  }
+
+  const isSamePlan = currentPrice.id === targetPrice.id;
+  const isSameProduct = currentPrice.product === targetPrice.product || 
+    (typeof currentPrice.product === 'object' && currentPrice.product?.id === targetPrice.product) ||
+    (typeof targetPrice.product === 'object' && currentPrice.product === targetPrice.product.id);
+  
+  const isSameBillingCycle = currentPrice.recurring?.interval === targetPrice.recurring?.interval;
+
+  // Calculate price difference (monthly normalized)
+  const currentMonthlyAmount = currentPrice.recurring?.interval === 'year' 
+    ? (currentPrice.unit_amount ?? 0) / 12 
+    : (currentPrice.unit_amount ?? 0);
+  
+  const targetMonthlyAmount = targetPrice.recurring?.interval === 'year'
+    ? (targetPrice.unit_amount ?? 0) / 12
+    : (targetPrice.unit_amount ?? 0);
+
+  const priceDifference = targetMonthlyAmount - currentMonthlyAmount;
+
+  return {
+    isUpgrade: !isSamePlan && priceDifference > 0,
+    isDowngrade: !isSamePlan && priceDifference < 0,
+    isSamePlan,
+    isSameBillingCycle,
+    isSameProduct,
+    priceDifference: Math.round(priceDifference / 100), // Convert to dollars
+    currentPrice,
+    targetPrice
+  };
+}
+
+export async function upgradeSubscription(userId: string, newPriceId: string, prorationBehavior: 'create_prorations' | 'none' = 'create_prorations') {
+  const currentSub = await getCurrentSubscription(userId);
+  
+  if (!currentSub?.subscription) {
+    throw new Error('No active subscription found');
+  }
+
+  const subscription = await stripe.subscriptions.update(currentSub.subscription.id, {
+    items: [{
+      id: currentSub.subscription.items.data[0]?.id,
+      price: newPriceId,
+    }],
+    proration_behavior: prorationBehavior,
+  });
+
+  return subscription;
+}
+
+export async function scheduleSubscriptionChange(userId: string, newPriceId: string) {
+  const currentSub = await getCurrentSubscription(userId);
+  
+  if (!currentSub?.subscription) {
+    throw new Error('No active subscription found');
+  }
+
+  const subscription = await stripe.subscriptions.update(currentSub.subscription.id, {
+    items: [{
+      id: currentSub.subscription.items.data[0]?.id,
+      price: newPriceId,
+    }],
+    proration_behavior: 'none',
+    billing_cycle_anchor: 'unchanged',
+  });
+
+  return subscription;
+}
+
+export async function previewSubscriptionChange(userId: string, newPriceId: string) {
+  const currentSub = await getCurrentSubscription(userId);
+  
+  if (!currentSub?.subscription) {
+    throw new Error('No active subscription found');
+  }
+
+  // For now, return a simple preview without calling the Stripe API
+  // This can be enhanced later with the correct Stripe API method
+  const comparison = await compareSubscriptionPrices(userId, newPriceId);
+  
+  return {
+    immediateCharge: comparison.priceDifference > 0 ? comparison.priceDifference * 100 : 0,
+    nextInvoiceAmount: comparison.priceDifference > 0 ? comparison.priceDifference * 100 : 0,
+    prorationAmount: comparison.priceDifference * 100,
+    creditAmount: comparison.priceDifference < 0 ? Math.abs(comparison.priceDifference) * 100 : 0,
+  };
 } 

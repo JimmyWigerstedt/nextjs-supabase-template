@@ -53,9 +53,27 @@ async function initializeInternalDatabase() {
       'stripeCustomerId',
       'stripeSubscriptionId', 
       'planName',
-      'subscriptionStatus'
+      'subscriptionStatus',
+      'currentPeriodStart',
+      'currentPeriodEnd',
+      'trialEnd',
+      'cancelAtPeriodEnd',
+      'priceId'
     ];
     
+    // Define field types for proper column creation
+    const fieldTypes = {
+      'stripeCustomerId': 'VARCHAR',
+      'stripeSubscriptionId': 'VARCHAR',
+      'planName': 'VARCHAR',
+      'subscriptionStatus': 'VARCHAR',
+      'currentPeriodStart': 'TIMESTAMP',
+      'currentPeriodEnd': 'TIMESTAMP',
+      'trialEnd': 'TIMESTAMP',
+      'cancelAtPeriodEnd': 'BOOLEAN DEFAULT FALSE',
+      'priceId': 'VARCHAR'
+    };
+
     for (const field of stripeFields) {
       try {
         // Check if field exists
@@ -66,12 +84,14 @@ async function initializeInternalDatabase() {
         `, [schema, field]);
         
         if (fieldCheck.rows.length === 0) {
-          // Field doesn't exist, add it
+          // Field doesn't exist, add it with proper type
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
+          const fieldType = fieldTypes[field] ?? 'VARCHAR';
           await client.query(`
             ALTER TABLE "${schema}"."userData" 
-            ADD COLUMN "${field}" VARCHAR
+            ADD COLUMN "${field}" ${fieldType}
           `);
-          console.log(`✅ Added field: ${field}`);
+          console.log(`✅ Added field: ${field} (${fieldType})`);
         } else {
           console.log(`✅ Field already exists: ${field}`);
         }

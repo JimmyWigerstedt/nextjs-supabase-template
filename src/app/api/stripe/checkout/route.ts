@@ -57,16 +57,32 @@ export async function GET(request: NextRequest) {
     try {
       await client.query(
         `INSERT INTO "${env.NC_SCHEMA}"."userData" 
-         ("UID", "stripeCustomerId", "stripeSubscriptionId", "planName", "subscriptionStatus", "updated_at") 
-         VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP)
+         ("UID", "stripeCustomerId", "stripeSubscriptionId", "planName", "subscriptionStatus", "priceId", "currentPeriodStart", "currentPeriodEnd", "trialEnd", "cancelAtPeriodEnd", "updated_at") 
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, CURRENT_TIMESTAMP)
          ON CONFLICT ("UID") 
          DO UPDATE SET 
            "stripeCustomerId" = EXCLUDED."stripeCustomerId",
            "stripeSubscriptionId" = EXCLUDED."stripeSubscriptionId",
            "planName" = EXCLUDED."planName",
            "subscriptionStatus" = EXCLUDED."subscriptionStatus",
+           "priceId" = EXCLUDED."priceId",
+           "currentPeriodStart" = EXCLUDED."currentPeriodStart",
+           "currentPeriodEnd" = EXCLUDED."currentPeriodEnd",
+           "trialEnd" = EXCLUDED."trialEnd",
+           "cancelAtPeriodEnd" = EXCLUDED."cancelAtPeriodEnd",
            "updated_at" = CURRENT_TIMESTAMP`,
-        [userId, customerId, subscriptionId, product.name, subscription.status]
+        [
+          userId, 
+          customerId, 
+          subscriptionId, 
+          product.name, 
+          subscription.status,
+          plan.id,
+          new Date((subscription as any).current_period_start * 1000), // eslint-disable-line @typescript-eslint/no-explicit-any
+          new Date((subscription as any).current_period_end * 1000), // eslint-disable-line @typescript-eslint/no-explicit-any
+          (subscription as any).trial_end ? new Date((subscription as any).trial_end * 1000) : null, // eslint-disable-line @typescript-eslint/no-explicit-any
+          (subscription as any).cancel_at_period_end // eslint-disable-line @typescript-eslint/no-explicit-any
+        ]
       );
     } finally {
       client.release();

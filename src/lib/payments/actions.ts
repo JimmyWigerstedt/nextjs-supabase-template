@@ -5,7 +5,12 @@ import {
   createCustomerPortalSession,
   getStripePrices,
   getStripeProducts,
-  getOrganizedStripePrices
+  getOrganizedStripePrices,
+  getCurrentSubscription,
+  compareSubscriptionPrices,
+  upgradeSubscription,
+  scheduleSubscriptionChange,
+  previewSubscriptionChange
 } from './stripe';
 
 export const paymentsRouter = createTRPCRouter({
@@ -35,5 +40,38 @@ export const paymentsRouter = createTRPCRouter({
   getStripeProducts: authorizedProcedure
     .query(async () => {
       return await getStripeProducts();
+    }),
+
+  // Enhanced subscription management procedures
+  getCurrentSubscription: authorizedProcedure
+    .query(async ({ ctx }) => {
+      return await getCurrentSubscription(ctx.supabaseUser!.id);
+    }),
+
+  getSubscriptionComparison: authorizedProcedure
+    .input(z.object({ targetPriceId: z.string() }))
+    .query(async ({ input, ctx }) => {
+      return await compareSubscriptionPrices(ctx.supabaseUser!.id, input.targetPriceId);
+    }),
+
+  upgradeSubscription: authorizedProcedure
+    .input(z.object({ 
+      newPriceId: z.string(),
+      prorationBehavior: z.enum(['create_prorations', 'none']).default('create_prorations')
+    }))
+    .mutation(async ({ input, ctx }) => {
+      return await upgradeSubscription(ctx.supabaseUser!.id, input.newPriceId, input.prorationBehavior);
+    }),
+
+  scheduleDowngrade: authorizedProcedure
+    .input(z.object({ newPriceId: z.string() }))
+    .mutation(async ({ input, ctx }) => {
+      return await scheduleSubscriptionChange(ctx.supabaseUser!.id, input.newPriceId);
+    }),
+
+  previewSubscriptionChange: authorizedProcedure
+    .input(z.object({ newPriceId: z.string() }))
+    .query(async ({ input, ctx }) => {
+      return await previewSubscriptionChange(ctx.supabaseUser!.id, input.newPriceId);
     }),
 }); 
