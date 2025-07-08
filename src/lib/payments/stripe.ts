@@ -231,13 +231,22 @@ export async function handleSubscriptionChange(
         productName = plan.product.name || 'Unknown Plan';
       }
       
-      // Access timestamps directly from subscription object using type assertion
+      // Access timestamps - try subscription object first, then subscription items
       // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access
-      const currentPeriodStartTs = (subscription as any).current_period_start;
+      let currentPeriodStartTs = (subscription as any).current_period_start;
       // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access
-      const currentPeriodEndTs = (subscription as any).current_period_end;
+      let currentPeriodEndTs = (subscription as any).current_period_end;
       // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access
       const trialEndTs = (subscription as any).trial_end;
+      
+      // If not found on subscription object, try subscription items (common for active subscriptions)
+      if (!currentPeriodStartTs && subscription.items?.data?.[0]) {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access
+        currentPeriodStartTs = (subscription.items.data[0] as any).current_period_start;
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access
+        currentPeriodEndTs = (subscription.items.data[0] as any).current_period_end;
+        console.log(`[handleSubscriptionChange] Using timestamps from subscription items`);
+      }
       
       console.log(`[handleSubscriptionChange] Raw timestamps - start: ${currentPeriodStartTs}, end: ${currentPeriodEndTs}, trial: ${trialEndTs}`);
       

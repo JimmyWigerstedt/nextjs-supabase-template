@@ -74,15 +74,24 @@ export async function GET(request: NextRequest) {
       userCheckClient.release();
     }
 
-    // Safely convert timestamps with validation
+    // Safely convert timestamps with validation - try subscription object first, then subscription items
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access
-    const currentPeriodStartTs = (subscription as any).current_period_start;
+    let currentPeriodStartTs = (subscription as any).current_period_start;
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access
-    const currentPeriodEndTs = (subscription as any).current_period_end;
+    let currentPeriodEndTs = (subscription as any).current_period_end;
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access
     const trialEndTs = (subscription as any).trial_end;
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access
     const cancelAtPeriodEnd = (subscription as any).cancel_at_period_end ?? false;
+
+    // If not found on subscription object, try subscription items (common for active subscriptions)
+    if (!currentPeriodStartTs && subscription.items?.data?.[0]) {
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access
+      currentPeriodStartTs = (subscription.items.data[0] as any).current_period_start;
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access
+      currentPeriodEndTs = (subscription.items.data[0] as any).current_period_end;
+      console.log(`[checkout] Using timestamps from subscription items`);
+    }
 
     console.log(`[checkout] Raw timestamps - start: ${currentPeriodStartTs}, end: ${currentPeriodEndTs}, trial: ${trialEndTs}`);
 
