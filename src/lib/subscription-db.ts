@@ -1,10 +1,6 @@
 import { internalDb } from "~/server/internal-db";
 import { env } from "~/env";
-import Stripe from "stripe";
-
-const stripe = new Stripe(env.STRIPE_SECRET_KEY, {
-  apiVersion: '2025-06-30.basil',
-});
+import type Stripe from "stripe";
 
 /**
  * Local subscription metadata stored for cache-first operations
@@ -40,29 +36,7 @@ export interface StripeSubscriptionData {
   }[];
 }
 
-/**
- * Resolve product name from StripeSubscriptionData via Stripe API calls
- * 
- * Implementation notes: Makes two API calls (price retrieve + product retrieve)
- * Used by: Feature access control and subscription display logic
- */
-export async function getPlanNameFromSubscriptionData(subscription: StripeSubscriptionData): Promise<string> {
-  const priceId = subscription.items[0]?.price_id;
-  if (!priceId) return 'unknown';
 
-  try {
-    const price = await stripe.prices.retrieve(priceId);
-    const productId = typeof price.product === 'string' 
-      ? price.product 
-      : price.product.id;
-    
-    const product = await stripe.products.retrieve(productId);
-    return product.name.toLowerCase();
-  } catch (error) {
-    console.error('Failed to get product name:', error);
-    return 'unknown';
-  }
-}
 
 /**
  * Upsert subscription metadata in local database with comprehensive field handling
