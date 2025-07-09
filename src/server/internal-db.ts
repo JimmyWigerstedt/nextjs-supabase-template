@@ -76,45 +76,25 @@ export const ensureUidConstraintOnce = async () => {
   }
 };
 
-// Ensure Stripe subscription fields exist
+// Ensure minimal Stripe subscription fields exist
 export const ensureStripeFieldsOnce = async () => {
-  console.log('[internal-db] Checking Stripe subscription fields...');
+  console.log('[internal-db] Checking minimal Stripe subscription fields...');
   let client;
   
   try {
     client = await internalDb.connect();
     
-    // Define the Stripe fields that should exist
+    // Define the minimal Stripe fields that should exist (Stripe-first approach)
     const stripeFields = [
-      'stripeCustomerId',
-      'stripeSubscriptionId', 
-      'planName',
-      'subscriptionStatus',
-      'currentPeriodStart',
-      'currentPeriodEnd',
-      'trialEnd',
-      'cancelAtPeriodEnd',
-      'priceId'
+      'stripe_customer_id',
+      'stripe_subscription_id', 
+      'subscription_plan',
+      'subscription_status'
     ];
     
-    // Define field types for proper column creation
-    const getFieldType = (fieldName: string): string => {
-      switch (fieldName) {
-        case 'stripeCustomerId':
-        case 'stripeSubscriptionId':
-        case 'planName':
-        case 'subscriptionStatus':
-        case 'priceId':
-          return 'VARCHAR';
-        case 'currentPeriodStart':
-        case 'currentPeriodEnd':
-        case 'trialEnd':
-          return 'TIMESTAMP';
-        case 'cancelAtPeriodEnd':
-          return 'BOOLEAN DEFAULT FALSE';
-        default:
-          return 'VARCHAR';
-      }
+    // All new minimal fields are VARCHAR
+    const getFieldType = (_fieldName: string): string => {
+      return 'VARCHAR';
     };
 
     for (const field of stripeFields) {
