@@ -1,19 +1,24 @@
 // ==========================================
 // TEMPLATE REFERENCE: Real-Time Data Component
 // ==========================================
-// This component demonstrates the standard pattern for n8n integration.
+// This component demonstrates the standard pattern for n8n integration with
+// clear separation between input fields and persistent fields.
 // 
+// FIELD TYPES:
+// - INPUT_FIELDS: Form data sent to N8N (no database persistence needed)
+// - PERSISTENT_FIELDS: Store N8N results or user-specific data (require database columns)
+//
 // TO CREATE A NEW PAGE:
 // 1. Copy this component structure
-// 2. Update DEVELOPMENT_FIELDS with your field names  
+// 2. Update INPUT_FIELDS and PERSISTENT_FIELDS with your field names  
 // 3. Keep all SSE, state, and tRPC patterns identical
 // 4. Customize only the UI rendering sections
 //
 // SYSTEM MECHANICS:
-// - DEVELOPMENT_FIELDS drives form generation and database operations
+// - INPUT_FIELDS drives form generation for N8N payloads
+// - PERSISTENT_FIELDS drives database operations and real-time updates
 // - SSE connection enables real-time updates from n8n webhooks
-// - fieldInputs state manages form data for all configured fields
-// - tRPC mutations handle database operations and n8n communication
+// - Individual field save functionality for editable persistent fields
 // ==========================================
 
 "use client";
@@ -25,53 +30,55 @@ import { Label } from "~/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { toast } from "sonner";
 
-// UserData interface for type checking
-// interface UserData {
-//   UID: string;
-//   test1: string;
-//   test2: string;
-//   created_at?: string;
-//   updated_at?: string;
-// }
-
 // TEMPLATE PATTERN: Field Configuration
-// This array controls the entire system behavior:
-// - Form inputs are generated automatically for each field
-// - Database operations include these exact field names
-// - n8n receives these fields in the payload
-// - UI updates target these fields for highlighting
-const DEVELOPMENT_FIELDS = [
-  'test1',
-  'test2',
-  'customField1',    // ✨ Demo: added without any other code changes!
-  // Add new fields here during development:
-  // 'userPreference',
-  // 'workflowData',
+// Clear separation between input fields and persistent fields
+
+// Input fields - form data sent to N8N (no database persistence needed)
+const INPUT_FIELDS = [
+  'orderDescription',
+  'urgencyLevel'
+];
+
+// Persistent fields - store N8N results or user-specific data (require database columns)
+const PERSISTENT_FIELDS = [
+  'aiRecommendation',  // N8N analysis result (read-only)
+  'finalDecision'      // User can edit this field and save back
 ];
 
 export function N8nDemoClient() {
   // TEMPLATE PATTERN: Required State Management
-  // These state variables enable the core functionality:
-  // - fieldInputs: Form data for all configured fields
-  // - highlightedFields: Visual feedback for real-time updates
-  // - isConnected: SSE connection status indication
-  // Do not modify this state structure.
   const utils = clientApi.useUtils();
-  const [fieldInputs, setFieldInputs] = useState<Record<string, string>>(
-    DEVELOPMENT_FIELDS.reduce((acc, field) => {
+  
+  // Input form data (gets cleared after sending to N8N)
+  const [inputData, setInputData] = useState<Record<string, string>>(
+    INPUT_FIELDS.reduce((acc, field) => {
       acc[field] = "";
       return acc;
     }, {} as Record<string, string>)
   );
+
+  // Persistent data (from database, can be displayed and some fields edited)
+  const [persistentData, setPersistentData] = useState<Record<string, string>>({});
+  const [editableValues, setEditableValues] = useState<Record<string, string>>({});
+  const [savingFields, setSavingFields] = useState<Set<string>>(new Set());
+
+  // SSE and real-time update state
   const [isConnected, setIsConnected] = useState(false);
   const [lastUpdate, setLastUpdate] = useState<string | null>(null);
-  const [highlightedFields] = useState<Set<string>>(new Set());
+  const [highlightedFields, setHighlightedFields] = useState<Set<string>>(new Set());
   const [showDebug, setShowDebug] = useState(false);
   const eventSourceRef = useRef<EventSource | null>(null);
 
-  // Add helper function to manage field updates:
-  const updateFieldInput = (fieldName: string, value: string) => {
-    setFieldInputs(prev => ({
+  // Helper functions
+  const updateInputField = (fieldName: string, value: string) => {
+    setInputData(prev => ({
+      ...prev,
+      [fieldName]: value
+    }));
+  };
+
+  const updateEditableField = (fieldName: string, value: string) => {
+    setEditableValues(prev => ({
       ...prev,
       [fieldName]: value
     }));
@@ -84,17 +91,27 @@ export function N8nDemoClient() {
     isLoading: isLoadingData,
   } = clientApi.internal.getUserData.useQuery();
 
-  const { mutate: updateUserData, isPending: isUpdating } = 
+  const { mutate: updateUserData } = 
     clientApi.internal.updateUserData.useMutation({
-      onSuccess: (_data) => {
-        toast.success("Data updated successfully!");
+      onSuccess: (data) => {
+        toast.success("Field updated successfully!");
         void refetchUserData();
-        setFieldInputs(prev => 
-          Object.keys(prev).reduce((acc, key) => {
-            acc[key] = "";
-            return acc;
-          }, {} as Record<string, string>)
-        );
+        
+        // Update persistent data state with proper type conversion
+        const updatedData: Record<string, string> = {};
+        Object.entries(data as Record<string, unknown>).forEach(([key, value]) => {
+          updatedData[key] = String(value ?? '');
+        });
+        
+        setPersistentData((prev: Record<string, string>) => {
+          const newData: Record<string, string> = { ...prev };
+          Object.entries(updatedData).forEach(([key, value]) => {
+            if (PERSISTENT_FIELDS.includes(key)) {
+              newData[key] = value;
+            }
+          });
+          return newData;
+        });
       },
       onError: (error) => {
         toast.error(`Error: ${error.message}`);
@@ -115,17 +132,17 @@ export function N8nDemoClient() {
   const { mutate: sendToN8n, isPending: isSendingToN8n } = 
     clientApi.internal.sendToN8n.useMutation({
       onSuccess: () => {
-        toast.success("Payload sent to n8n successfully! Waiting for webhook response...");
-        // Clear inputs after successful send
-        setFieldInputs(prev => 
-          Object.keys(prev).reduce((acc, key) => {
-            acc[key] = "";
+        toast.success("Sent to N8N successfully! Waiting for webhook response...");
+        // Clear input fields after successful send
+        setInputData(
+          INPUT_FIELDS.reduce((acc, field) => {
+            acc[field] = "";
             return acc;
           }, {} as Record<string, string>)
         );
       },
       onError: (error) => {
-        toast.error(`n8n send failed: ${error.message}`);
+        toast.error(`N8N error: ${error.message}`);
       },
     });
 
@@ -137,17 +154,10 @@ export function N8nDemoClient() {
     refetch: testConnection, 
     isLoading: isTestingConnection 
   } = clientApi.internal.testConnection.useQuery(undefined, {
-    enabled: false, // Don't run automatically
+    enabled: false,
   });
 
   // TEMPLATE PATTERN: Real-Time Updates via SSE
-  // This connection enables automatic UI updates when n8n completes processing.
-  // The system automatically:
-  // - Establishes connection on component mount
-  // - Processes webhook notifications from n8n
-  // - Highlights updated fields and refreshes data
-  // - Handles connection failures with auto-reconnect
-  // Copy this section exactly to all new components.
   useEffect(() => {
     const eventSource = new EventSource("/api/stream/user-updates");
     eventSourceRef.current = eventSource;
@@ -161,11 +171,23 @@ export function N8nDemoClient() {
         const data = JSON.parse(event.data) as {
           type: string;
           updatedFields?: string[];
+          fetchedValues?: Record<string, string>;
           timestamp?: string;
         };
 
         if (data.type === "userData-updated") {
           setLastUpdate(data.timestamp ?? new Date().toISOString());
+          
+          // Highlight updated fields
+          if (data.updatedFields) {
+            setHighlightedFields(new Set(data.updatedFields));
+            
+            // Clear highlights after 3 seconds
+            setTimeout(() => {
+              setHighlightedFields(new Set());
+            }, 3000);
+          }
+          
           // Use invalidate instead of refetch for better performance
           void utils.internal.getUserData.invalidate();
         }
@@ -177,9 +199,6 @@ export function N8nDemoClient() {
     eventSource.onerror = () => {
       setIsConnected(false);
       eventSource.close();
-      setTimeout(() => {
-        // Reconnect logic here if needed
-      }, 5000);
     };
 
     return () => {
@@ -187,49 +206,60 @@ export function N8nDemoClient() {
         eventSourceRef.current.close();
       }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Empty dependency array - SSE connection should only be created once
+  }, [utils.internal.getUserData]);
 
-  // Initialize user data on first load
+  // Initialize user data and sync persistent data
   useEffect(() => {
     if (!userData && !isLoadingData) {
       initializeUserData();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userData, isLoadingData, initializeUserData]);
 
-  const handleUpdateData = () => {
-    const updates: Record<string, string> = {};
-    
-    Object.entries(fieldInputs).forEach(([fieldName, value]) => {
-      if (value.trim()) {
-        updates[fieldName] = value.trim();
-      }
-    });
-
-    if (Object.keys(updates).length === 0) {
-      toast.error("Please enter at least one field to update");
-      return;
+  useEffect(() => {
+    if (userData) {
+      const persistentValues: Record<string, string> = {};
+      PERSISTENT_FIELDS.forEach(field => {
+        persistentValues[field] = String((userData as Record<string, unknown>)[field] ?? '');
+      });
+      setPersistentData(persistentValues);
+      setEditableValues(persistentValues);
     }
+  }, [userData]);
 
-    updateUserData(updates);
-  };
-
+  // Event handlers
   const handleSendToN8n = () => {
     const dataToSend: Record<string, string> = {};
     
-    Object.entries(fieldInputs).forEach(([fieldName, value]) => {
+    Object.entries(inputData).forEach(([fieldName, value]) => {
       if (value.trim()) {
         dataToSend[fieldName] = value.trim();
       }
     });
 
     if (Object.keys(dataToSend).length === 0) {
-      toast.error("Please enter some data to send to n8n");
+      toast.error("Please enter some data to send to N8N");
       return;
     }
 
     sendToN8n(dataToSend);
+  };
+
+  const handleSaveField = (fieldName: string) => {
+    const value = editableValues[fieldName];
+    if (value === undefined) return;
+
+    setSavingFields(prev => new Set(prev).add(fieldName));
+    
+    updateUserData({ [fieldName]: value });
+    
+    // Clear saving state after a brief delay
+    setTimeout(() => {
+      setSavingFields(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(fieldName);
+        return newSet;
+      });
+    }, 1000);
   };
 
   const getFieldHighlight = (fieldName: string) => {
@@ -240,13 +270,13 @@ export function N8nDemoClient() {
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center p-4">
-      <div className="w-full max-w-4xl space-y-6">
+      <div className="w-full max-w-6xl space-y-6">
         
         {/* Header */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center justify-between">
-              Enhanced n8n + Internal Database Demo
+              N8N Integration Demo - Dynamic Field Handling
               <div className="flex items-center space-x-2">
                 <div className={`w-3 h-3 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`} />
                 <span className="text-sm text-muted-foreground">
@@ -255,64 +285,113 @@ export function N8nDemoClient() {
               </div>
             </CardTitle>
           </CardHeader>
+          <CardContent>
+            <div className="space-y-2 text-sm text-muted-foreground">
+              <p>
+                <strong>Demo Pattern:</strong> This demo shows clear separation between input fields and persistent fields.
+              </p>
+              <p>
+                <strong>Input Fields:</strong> Form data sent to N8N (no database persistence needed)
+              </p>
+              <p>
+                <strong>Persistent Fields:</strong> Store N8N results or user-specific data (require database columns)
+              </p>
+            </div>
+          </CardContent>
         </Card>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           
-          {/* Data Input Section */}
+          {/* Input Section */}
           <Card>
             <CardHeader>
-              <CardTitle>Data Input Section</CardTitle>
+              <CardTitle>Input Section</CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Form inputs sent to N8N (no database persistence needed)
+              </p>
             </CardHeader>
             <CardContent className="space-y-4">
-              {Object.keys(fieldInputs).map((fieldName) => (
+              {INPUT_FIELDS.map((fieldName) => (
                 <div key={fieldName} className="space-y-2">
                   <Label htmlFor={`${fieldName}-input`}>
                     {fieldName.charAt(0).toUpperCase() + fieldName.slice(1).replace(/([A-Z])/g, ' $1')}
                   </Label>
                   <Input
                     id={`${fieldName}-input`}
-                    value={fieldInputs[fieldName] ?? ""}
-                    onChange={(e) => updateFieldInput(fieldName, e.target.value)}
-                    placeholder={`Enter ${fieldName} value`}
-                    disabled={isUpdating}
+                    value={inputData[fieldName] ?? ""}
+                    onChange={(e) => updateInputField(fieldName, e.target.value)}
+                    placeholder={`Enter ${fieldName}`}
+                    disabled={isSendingToN8n}
                   />
                 </div>
               ))}
               
               <Button 
-                onClick={handleUpdateData} 
-                disabled={isUpdating}
+                onClick={handleSendToN8n} 
+                disabled={isSendingToN8n}
                 className="w-full"
               >
-                {isUpdating ? "Updating..." : "Save Data to Internal Database"}
+                {isSendingToN8n ? "Sending to N8N..." : "Send to N8N"}
               </Button>
+              
+              <p className="text-xs text-muted-foreground">
+                Input fields are cleared after sending to N8N.
+              </p>
             </CardContent>
           </Card>
 
-          {/* Data Display Section */}
+          {/* Persistent Data Section */}
           <Card>
             <CardHeader>
-              <CardTitle>Current Database Values</CardTitle>
+              <CardTitle>Persistent Data Section</CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Database fields that store N8N results or user-specific data
+              </p>
             </CardHeader>
             <CardContent className="space-y-4">
               {isLoadingData ? (
-                <p className="text-muted-foreground">Loading data...</p>
+                <p className="text-muted-foreground">Loading persistent data...</p>
               ) : (
                 <>
-                  {userData && Object.entries(userData as Record<string, unknown>)
-                    .filter(([key]) => !['UID', 'created_at', 'updated_at'].includes(key))
-                    .map(([fieldName, value]) => (
+                  {PERSISTENT_FIELDS.map((fieldName) => {
+                    const currentValue = persistentData[fieldName] ?? '';
+                    const editableValue = editableValues[fieldName] ?? '';
+                    const isEditable = fieldName === 'finalDecision'; // Example: only finalDecision is editable
+                    const isSaving = savingFields.has(fieldName);
+                    const hasChanged = editableValue !== currentValue;
+                    
+                    return (
                       <div key={fieldName} className="space-y-2">
                         <Label>
-                          {fieldName.charAt(0).toUpperCase() + fieldName.slice(1).replace(/([A-Z])/g, ' $1')} (Current Value)
+                          {fieldName.charAt(0).toUpperCase() + fieldName.slice(1).replace(/([A-Z])/g, ' $1')}
+                          {isEditable && " (Editable)"}
                         </Label>
-                        <div className={`p-3 border rounded-md bg-muted ${getFieldHighlight(fieldName)}`}>
-                          {String(value) || "(empty)"}
-                        </div>
+                        
+                        {isEditable ? (
+                          <div className="flex space-x-2">
+                            <Input
+                              value={editableValue}
+                              onChange={(e) => updateEditableField(fieldName, e.target.value)}
+                              placeholder={`Enter ${fieldName}`}
+                              className={getFieldHighlight(fieldName)}
+                              disabled={isSaving}
+                            />
+                            <Button
+                              size="sm"
+                              onClick={() => handleSaveField(fieldName)}
+                              disabled={isSaving || !hasChanged}
+                            >
+                              {isSaving ? "Saving..." : "Save"}
+                            </Button>
+                          </div>
+                        ) : (
+                          <div className={`p-3 border rounded-md bg-muted ${getFieldHighlight(fieldName)}`}>
+                            {currentValue || "(empty)"}
+                          </div>
+                        )}
                       </div>
-                    ))
-                  }
+                    );
+                  })}
                   
                   {lastUpdate && (
                     <div className="text-sm text-muted-foreground">
@@ -325,30 +404,64 @@ export function N8nDemoClient() {
           </Card>
         </div>
 
-        {/* n8n Testing Section */}
+        {/* N8N Integration Instructions */}
         <Card>
           <CardHeader>
-            <CardTitle>Send to n8n Section</CardTitle>
+            <CardTitle>N8N Integration Instructions</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              This section sends data to n8n for processing. After n8n completes its workflow,
-              it will send a webhook back to update the UI with the processed results.
-            </p>
-            
             <div className="space-y-4">
-              <Button 
-                onClick={handleSendToN8n}
-                className="w-full"
-                disabled={isSendingToN8n || isUpdating}
-              >
-                {isSendingToN8n ? "Sending to n8n..." : "Send Data to n8n"}
-              </Button>
+              <div className="p-4 bg-blue-50 rounded-md">
+                <h4 className="font-semibold mb-2">🔧 Setup Required Database Fields</h4>
+                <p className="text-sm text-muted-foreground mb-2">
+                  Only persistent fields need database columns. Run these commands:
+                </p>
+                <pre className="text-xs bg-white p-2 rounded border">
+{`npm run add-field aiRecommendation
+npm run add-field finalDecision`}
+                </pre>
+              </div>
               
-              <p className="text-sm text-muted-foreground">
-                This will send the current input values to n8n. n8n will process them and send a webhook 
-                back to refresh the display section.
-              </p>
+              <div className="p-4 bg-green-50 rounded-md">
+                <h4 className="font-semibold mb-2">📤 What N8N Receives</h4>
+                <pre className="text-xs bg-white p-2 rounded border">
+{`{
+  "user_id": "user-uuid-here",
+  "user_email": "user@example.com",
+  "data": {
+    "orderDescription": "user_input_value",
+    "urgencyLevel": "user_input_value"
+  },
+  "action": "process"
+}`}
+                </pre>
+              </div>
+              
+              <div className="p-4 bg-orange-50 rounded-md">
+                <h4 className="font-semibold mb-2">📥 What N8N Should Send Back</h4>
+                <p className="text-sm text-muted-foreground mb-2">
+                  After processing and updating database, send webhook to:
+                </p>
+                <pre className="text-xs bg-white p-2 rounded border">
+{`POST ${typeof window !== 'undefined' ? window.location.origin : ''}/api/webhooks/internal-updated
+
+{
+  "user_id": "same-uuid-from-request",
+  "updatedFields": ["aiRecommendation", "finalDecision"]
+}`}
+                </pre>
+              </div>
+              
+              <div className="p-4 bg-purple-50 rounded-md">
+                <h4 className="font-semibold mb-2">🔄 Expected N8N Workflow</h4>
+                <ol className="text-sm text-muted-foreground space-y-1">
+                  <li>1. Receive payload at `/webhook/your-n8n-endpoint`</li>
+                  <li>2. Process business logic (calculate costs, determine processing time, etc.)</li>
+                  <li>3. Update database directly with calculated values</li>
+                  <li>4. Send webhook back to `/api/webhooks/internal-updated` with updated field names</li>
+                  <li>5. Watch persistent fields update automatically with highlighting</li>
+                </ol>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -393,7 +506,6 @@ export function N8nDemoClient() {
               </div>
             </div>
             
-            {/* Connection Test Results */}
             {connectionTestResult && (
               <div className="mt-4 p-4 bg-blue-50 rounded-md">
                 <h4 className="font-semibold mb-2">Connection Test Results:</h4>

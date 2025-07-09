@@ -42,9 +42,8 @@ export async function POST(request: NextRequest) {
     const body = await request.json() as {
       user_id: string;
       updatedFields: string[];
-      newValues?: { test1?: string; test2?: string };
     };
-    const { user_id, updatedFields, newValues } = body;
+    const { user_id, updatedFields } = body;
     
     if (!user_id || !Array.isArray(updatedFields)) {
       console.warn(`${LOG_PREFIX} Invalid payload structure`, { body });
@@ -56,7 +55,6 @@ export async function POST(request: NextRequest) {
     
     console.info(`${LOG_PREFIX} Processing update for user ${user_id}`, {
       updatedFields,
-      newValues: newValues ?? {},
     });
     
     // Validate updatedFields format

@@ -34,8 +34,8 @@ async function initializeInternalDatabase() {
     await client.query(`
       CREATE TABLE IF NOT EXISTS "${schema}"."userData" (
         "UID" VARCHAR PRIMARY KEY,
-        "test1" VARCHAR,
-        "test2" VARCHAR,
+        "aiRecommendation" VARCHAR,
+        "finalDecision" VARCHAR,
         "created_at" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         "updated_at" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         "stripeCustomerId" VARCHAR,
