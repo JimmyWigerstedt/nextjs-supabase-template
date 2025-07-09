@@ -7,6 +7,17 @@ import { env } from "~/env";
 
 const webhookSecret = env.STRIPE_WEBHOOK_SECRET;
 
+/**
+ * Stripe webhook handler for real-time subscription synchronization
+ * 
+ * Architecture notes: Processes Stripe events to maintain local cache consistency.
+ * Handles subscription lifecycle events and checkout completion to ensure local
+ * subscription metadata remains synchronized with Stripe's authoritative state.
+ * 
+ * Implementation notes: Webhook signature verification, event type routing, and
+ * comprehensive error handling with detailed logging for sync debugging.
+ * Used by: Stripe event delivery system for real-time subscription updates
+ */
 export async function POST(request: NextRequest) {
   const payload = await request.text();
   const signature = request.headers.get('stripe-signature')!;
@@ -33,7 +44,13 @@ export async function POST(request: NextRequest) {
         const subscription = event.data.object;
         console.log(`[webhook] Syncing subscription: ${subscription.id}`);
         
-        // Simple sync - just update minimal local data
+        /**
+         * Subscription lifecycle event processing
+         * 
+         * Implementation notes: Handles subscription state changes by updating local
+         * cache with comprehensive metadata including plan resolution via Stripe API.
+         * Includes customer_id, subscription_id, resolved plan name, and status.
+         */
         await subscriptionService.syncSubscriptionFromWebhook(subscription);
         break;
       
@@ -41,7 +58,13 @@ export async function POST(request: NextRequest) {
         const session = event.data.object;
         console.log(`[webhook] Checkout completed: ${session.id}`);
         
-        // For subscription checkouts, sync the subscription
+        /**
+         * Post-checkout subscription sync
+         * 
+         * Implementation notes: For subscription checkouts, retrieves the created
+         * subscription from Stripe and syncs to local cache. Ensures immediate
+         * availability of subscription data after successful payment.
+         */
         if (session.mode === 'subscription' && session.subscription) {
           const subscription = await stripe.subscriptions.retrieve(session.subscription as string);
           await subscriptionService.syncSubscriptionFromWebhook(subscription);

@@ -12,7 +12,10 @@ const stripe = new Stripe(env.STRIPE_SECRET_KEY, {
 });
 
 /**
- * Get plan name from StripeSubscriptionData
+ * Resolve product name from StripeSubscriptionData by fetching price and product details from Stripe API
+ * 
+ * Implementation notes: Makes two API calls (price retrieve + product retrieve) to resolve plan name
+ * Used by: Feature access control and subscription display logic
  */
 async function getPlanNameFromSubscriptionData(subscription: StripeSubscriptionData): Promise<string> {
   const priceId = subscription.items[0]?.price_id;
@@ -33,7 +36,10 @@ async function getPlanNameFromSubscriptionData(subscription: StripeSubscriptionD
 }
 
 /**
- * Get plan name from Stripe Subscription object (for webhook usage)
+ * Resolve product name from Stripe Subscription object (webhook event handling)
+ * 
+ * Implementation notes: Makes two API calls (price retrieve + product retrieve) to resolve plan name
+ * Used by: Webhook synchronization to update local cache with plan names
  */
 async function getPlanNameFromStripeSubscription(subscription: Stripe.Subscription): Promise<string> {
   const priceId = subscription.items.data[0]?.price.id;
@@ -54,7 +60,10 @@ async function getPlanNameFromStripeSubscription(subscription: Stripe.Subscripti
 }
 
 /**
- * Helper to check if a plan has access to a specific feature
+ * Feature access control lookup with plan-based permission mapping
+ * 
+ * Implementation notes: Static mapping of plan names to feature arrays
+ * Used by: Authorization checks throughout the application
  */
 function checkFeatureAccess(planName: string, feature: string): boolean {
   const featureMap: Record<string, string[]> = {
@@ -69,14 +78,24 @@ function checkFeatureAccess(planName: string, feature: string): boolean {
 
 export class SubscriptionService {
   /**
-   * Get minimal local subscription data (just what we need for Stripe API calls)
+   * Retrieve cached subscription metadata from local database
+   * 
+   * Implementation notes: Database query to userData table for Stripe identifiers and plan info
+   * Used by: All subscription operations as first step in cache-first strategy
    */
   async getLocalSubscriptionData(userId: string): Promise<MinimalSubscriptionData> {
     return await getMinimalSubscriptionData(userId);
   }
 
   /**
-   * Fetch fresh subscription details from Stripe
+   * Get active subscription using cache-first strategy with Stripe API fallback
+   * 
+   * Implementation notes: Complex multi-step process:
+   * 1. Check local cache for subscription_id
+   * 2. If found, direct Stripe API lookup
+   * 3. If missing, search customer's active subscriptions
+   * 4. Update local cache with discovered subscription
+   * Used by: Subscription display, billing portal, feature access checks
    */
   async getActiveSubscription(userId: string): Promise<StripeSubscriptionData | null> {
     const localData = await this.getLocalSubscriptionData(userId);
@@ -121,7 +140,11 @@ export class SubscriptionService {
   }
 
   /**
-   * Simple feature access check based on subscription plan
+   * Feature access check with cache-first strategy and automatic plan resolution
+   * 
+   * Implementation notes: Checks local plan first, falls back to Stripe API if missing,
+   * includes automatic plan name resolution and cache updates
+   * Used by: Authorization middleware, UI conditional rendering
    */
   async hasFeature(userId: string, feature: string): Promise<boolean> {
     const localData = await this.getLocalSubscriptionData(userId);
@@ -144,7 +167,10 @@ export class SubscriptionService {
   }
 
   /**
-   * Create customer portal session for subscription management
+   * Create Stripe customer portal session for subscription management
+   * 
+   * Implementation notes: Always creates fresh portal session from Stripe (no caching)
+   * Used by: Subscription management UI, billing page redirects
    */
   async createPortalSession(userId: string, returnUrl: string): Promise<string> {
     const localData = await this.getLocalSubscriptionData(userId);
@@ -162,7 +188,11 @@ export class SubscriptionService {
   }
 
   /**
-   * Create or retrieve a Stripe customer for the user
+   * Ensure Stripe customer exists, creating if necessary with local cache update
+   * 
+   * Implementation notes: Checks local cache first, creates new customer if missing,
+   * automatically updates local cache with customer_id
+   * Used by: Checkout flow, customer portal creation
    */
   async ensureStripeCustomer(userId: string, email: string): Promise<string> {
     const localData = await this.getLocalSubscriptionData(userId);
@@ -188,7 +218,11 @@ export class SubscriptionService {
   }
 
   /**
-   * Update local subscription data after webhook events
+   * Synchronize local subscription cache from Stripe webhook events
+   * 
+   * Implementation notes: Resolves plan name via product API calls and updates
+   * comprehensive local metadata (customer_id, subscription_id, plan, status)
+   * Used by: Webhook event handlers for real-time sync
    */
   async syncSubscriptionFromWebhook(subscription: Stripe.Subscription): Promise<void> {
     const userId = subscription.metadata.user_id;
@@ -209,7 +243,10 @@ export class SubscriptionService {
   }
 
   /**
-   * Format Stripe subscription data for consistent return type
+   * Transform Stripe Subscription object to internal StripeSubscriptionData format
+   * 
+   * Implementation notes: Handles type assertion and data extraction from Stripe objects
+   * Used by: Internal data formatting for consistent return types
    */
   private formatSubscriptionData(subscription: Stripe.Subscription): StripeSubscriptionData {
     // Use type assertion for properties that might have type issues

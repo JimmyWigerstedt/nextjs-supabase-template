@@ -5,7 +5,13 @@ import { env } from "~/env";
 import { stripe } from "~/lib/payments/stripe";
 
 export const paymentsRouter = createTRPCRouter({
-  // Simple checkout - just create session, let Stripe handle everything
+  /**
+   * Create Stripe checkout session for subscription purchase
+   * 
+   * Implementation notes: Always creates fresh Stripe session, ensures customer exists
+   * in local cache, embeds user metadata for webhook processing
+   * Used by: Pricing page, subscription upgrade flows
+   */
   createCheckoutSession: authorizedProcedure
     .input(z.object({ priceId: z.string() }))
     .mutation(async ({ input, ctx }) => {
@@ -40,7 +46,13 @@ export const paymentsRouter = createTRPCRouter({
       return { url: session.url! };
     }),
 
-  // Customer portal - let Stripe handle all subscription management
+  /**
+   * Create Stripe customer portal session for subscription management
+   * 
+   * Implementation notes: Always creates fresh portal session from Stripe API,
+   * requires existing customer_id from local cache
+   * Used by: Dashboard subscription management, billing page redirects
+   */
   createCustomerPortalSession: authorizedProcedure
     .mutation(async ({ ctx }) => {
       const user = ctx.supabaseUser!;
@@ -51,7 +63,13 @@ export const paymentsRouter = createTRPCRouter({
       return { url: portalUrl };
     }),
 
-  // Simple subscription fetch - get fresh data from Stripe
+  /**
+   * Retrieve active subscription using cache-first strategy with API fallback
+   * 
+   * Implementation notes: Uses complex cache-first logic with Stripe API fallback.
+   * May trigger local cache updates during retrieval process.
+   * Used by: Subscription display components, billing status checks
+   */
   getCurrentSubscription: authorizedProcedure
     .query(async ({ ctx }) => {
       const user = ctx.supabaseUser!;
@@ -60,7 +78,13 @@ export const paymentsRouter = createTRPCRouter({
       return subscription;
     }),
 
-  // Feature access check
+  /**
+   * Feature access authorization check with cache-first strategy
+   * 
+   * Implementation notes: Checks local subscription plan first, falls back to
+   * Stripe API if missing, includes automatic plan resolution and cache updates
+   * Used by: Component authorization, API endpoint protection
+   */
   hasFeature: authorizedProcedure
     .input(z.object({ feature: z.string() }))
     .query(async ({ input, ctx }) => {
@@ -70,7 +94,13 @@ export const paymentsRouter = createTRPCRouter({
       return { hasAccess };
     }),
 
-  // Simple pricing fetch from Stripe
+  /**
+   * Retrieve active Stripe prices with product information
+   * 
+   * Implementation notes: Always fetches fresh pricing data from Stripe API
+   * with product expansion for complete pricing display
+   * Used by: Pricing page, subscription upgrade options
+   */
   getStripePrices: authorizedProcedure
     .query(async () => {
       const prices = await stripe.prices.list({

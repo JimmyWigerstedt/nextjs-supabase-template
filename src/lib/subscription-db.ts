@@ -6,6 +6,13 @@ const stripe = new Stripe(env.STRIPE_SECRET_KEY, {
   apiVersion: '2025-06-30.basil',
 });
 
+/**
+ * Local subscription metadata stored for cache-first operations
+ * 
+ * Architecture notes: Despite the name "Minimal", this stores comprehensive subscription
+ * metadata required for performance optimization and offline operation capability.
+ * All fields are optional to handle partial sync states during webhook processing.
+ */
 export interface MinimalSubscriptionData {
   stripe_customer_id?: string;
   stripe_subscription_id?: string;
@@ -13,6 +20,12 @@ export interface MinimalSubscriptionData {
   subscription_status?: string;
 }
 
+/**
+ * Standardized subscription data format for internal operations
+ * 
+ * Architecture notes: Normalized representation of Stripe subscription data
+ * with resolved product information for feature access control.
+ */
 export interface StripeSubscriptionData {
   id: string;
   customer: string;
@@ -28,7 +41,10 @@ export interface StripeSubscriptionData {
 }
 
 /**
- * Get plan name from StripeSubscriptionData
+ * Resolve product name from StripeSubscriptionData via Stripe API calls
+ * 
+ * Implementation notes: Makes two API calls (price retrieve + product retrieve)
+ * Used by: Feature access control and subscription display logic
  */
 export async function getPlanNameFromSubscriptionData(subscription: StripeSubscriptionData): Promise<string> {
   const priceId = subscription.items[0]?.price_id;
@@ -49,7 +65,12 @@ export async function getPlanNameFromSubscriptionData(subscription: StripeSubscr
 }
 
 /**
- * Update minimal subscription data for a user
+ * Upsert subscription metadata in local database with comprehensive field handling
+ * 
+ * Implementation notes: Handles both user creation and updates, with dynamic SQL
+ * generation for partial updates. Stores all subscription-related metadata for
+ * performance optimization of feature access checks.
+ * Used by: Webhook sync, subscription service cache updates
  */
 export async function updateMinimalSubscriptionData(
   userId: string,
@@ -113,7 +134,11 @@ export async function updateMinimalSubscriptionData(
 }
 
 /**
- * Get minimal subscription data for a user
+ * Retrieve cached subscription metadata from local database
+ * 
+ * Implementation notes: Database query to userData table for comprehensive subscription
+ * metadata including customer IDs, subscription IDs, plan names, and status.
+ * Used by: All subscription operations as first step in cache-first strategy
  */
 export async function getMinimalSubscriptionData(userId: string): Promise<MinimalSubscriptionData> {
   const client = await internalDb.connect();
@@ -152,7 +177,11 @@ export async function getMinimalSubscriptionData(userId: string): Promise<Minima
 }
 
 /**
- * Clear all subscription data for a user (useful for cleanup)
+ * Remove all subscription metadata for user cleanup operations
+ * 
+ * Implementation notes: Sets all subscription fields to NULL rather than deleting
+ * the user record to preserve other user data.
+ * Used by: Account cleanup, subscription cancellation processing
  */
 export async function clearSubscriptionData(userId: string): Promise<void> {
   const client = await internalDb.connect();
@@ -176,7 +205,11 @@ export async function clearSubscriptionData(userId: string): Promise<void> {
 }
 
 /**
- * Get all users with active subscriptions (useful for batch operations)
+ * Query users with active subscriptions for batch operations
+ * 
+ * Implementation notes: Filters by subscription_status = 'active' and non-null
+ * customer_id to find users with valid Stripe subscriptions.
+ * Used by: Bulk operations, subscription analytics, cleanup jobs
  */
 export async function getUsersWithActiveSubscriptions(): Promise<Array<{ userId: string; data: MinimalSubscriptionData }>> {
   const client = await internalDb.connect();
@@ -218,7 +251,11 @@ export async function getUsersWithActiveSubscriptions(): Promise<Array<{ userId:
 }
 
 /**
- * Check if minimal subscription fields exist in the database
+ * Database schema validation for subscription metadata fields
+ * 
+ * Implementation notes: Checks information_schema for required columns to handle
+ * database migration scenarios and schema evolution.
+ * Used by: Application startup, database migration validation
  */
 export async function checkSubscriptionFieldsExist(): Promise<{
   stripe_customer_id: boolean;
