@@ -1,80 +1,16 @@
-import { env } from "~/env";
-import Stripe from "stripe";
+import type Stripe from "stripe";
 import { 
   type MinimalSubscriptionData, 
   type StripeSubscriptionData,
   updateMinimalSubscriptionData,
   getMinimalSubscriptionData
 } from "./subscription-db";
-
-const stripe = new Stripe(env.STRIPE_SECRET_KEY, {
-  apiVersion: '2025-06-30.basil',
-});
-
-/**
- * Resolve product name from StripeSubscriptionData by fetching price and product details from Stripe API
- * 
- * Implementation notes: Makes two API calls (price retrieve + product retrieve) to resolve plan name
- * Used by: Feature access control and subscription display logic
- */
-async function getPlanNameFromSubscriptionData(subscription: StripeSubscriptionData): Promise<string> {
-  const priceId = subscription.items[0]?.price_id;
-  if (!priceId) return 'unknown';
-
-  try {
-    const price = await stripe.prices.retrieve(priceId);
-    const productId = typeof price.product === 'string' 
-      ? price.product 
-      : price.product.id;
-    
-    const product = await stripe.products.retrieve(productId);
-    return product.name.toLowerCase();
-  } catch (error) {
-    console.error('Failed to get product name:', error);
-    return 'unknown';
-  }
-}
-
-/**
- * Resolve product name from Stripe Subscription object (webhook event handling)
- * 
- * Implementation notes: Makes two API calls (price retrieve + product retrieve) to resolve plan name
- * Used by: Webhook synchronization to update local cache with plan names
- */
-async function getPlanNameFromStripeSubscription(subscription: Stripe.Subscription): Promise<string> {
-  const priceId = subscription.items.data[0]?.price.id;
-  if (!priceId) return 'unknown';
-
-  try {
-    const price = await stripe.prices.retrieve(priceId);
-    const productId = typeof price.product === 'string' 
-      ? price.product 
-      : price.product.id;
-    
-    const product = await stripe.products.retrieve(productId);
-    return product.name.toLowerCase();
-  } catch (error) {
-    console.error('Failed to get product name:', error);
-    return 'unknown';
-  }
-}
-
-/**
- * Feature access control lookup with plan-based permission mapping
- * 
- * Implementation notes: Static mapping of plan names to feature arrays
- * Used by: Authorization checks throughout the application
- */
-function checkFeatureAccess(planName: string, feature: string): boolean {
-  const featureMap: Record<string, string[]> = {
-    'free': ['basic_features'],
-    'pro': ['basic_features', 'advanced_features'],
-    'enterprise': ['basic_features', 'advanced_features', 'enterprise_features'],
-  };
-
-  const planFeatures = featureMap[planName.toLowerCase()] ?? [];
-  return planFeatures.includes(feature);
-}
+import {
+  getPlanNameFromSubscriptionData,
+  getPlanNameFromStripeSubscription,
+  checkFeatureAccess
+} from "./stripe-product-utils";
+import { stripe } from "./payments/stripe";
 
 export class SubscriptionService {
   /**
