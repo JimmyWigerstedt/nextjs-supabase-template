@@ -1,24 +1,29 @@
 // ==========================================
-// TEMPLATE REFERENCE: Real-Time Data Component
+// N8N TEMPLATE COMPONENT - ADAPTATION GUIDE
 // ==========================================
-// This component demonstrates the standard pattern for n8n integration with
-// clear separation between input fields and persistent fields.
 // 
-// FIELD TYPES:
-// - INPUT_FIELDS: Form data sent to N8N (no database persistence needed)
-// - PERSISTENT_FIELDS: Store N8N results or user-specific data (require database columns)
+// 🎯 TEMPLATE USAGE: Copy this component for any N8N integration use case
+// 
+// ✅ ALWAYS CUSTOMIZE (Your Use Case):
+// - INPUT_FIELDS: Form data sent to N8N (no database persistence)
+// - PERSISTENT_FIELDS: Store N8N results or user data (require database columns)
+// - Field labels and validation logic in UI sections
 //
-// TO CREATE A NEW PAGE:
-// 1. Copy this component structure
-// 2. Update INPUT_FIELDS and PERSISTENT_FIELDS with your field names  
-// 3. Keep all SSE, state, and tRPC patterns identical
-// 4. Customize only the UI rendering sections
+// ❌ NEVER MODIFY (Core Template):
+// - SSE connection and real-time update logic
+// - tRPC mutation patterns and state management
+// - Real-time highlighting and update mechanics
 //
-// SYSTEM MECHANICS:
-// - INPUT_FIELDS drives form generation for N8N payloads
-// - PERSISTENT_FIELDS drives database operations and real-time updates
-// - SSE connection enables real-time updates from n8n webhooks
-// - Individual field save functionality for editable persistent fields
+// 🚀 5-MINUTE ADAPTATION PROCESS:
+// 1. cp src/app/n8n-demo/client-page.tsx src/app/your-page/client-page.tsx
+// 2. Update INPUT_FIELDS array with your form fields
+// 3. Update PERSISTENT_FIELDS array with your database fields  
+// 4. Run: node scripts/add-field.js [fieldName] for each PERSISTENT_FIELD
+// 5. Customize field labels and validation in UI sections
+//
+// 📋 FIELD TYPES EXPLAINED:
+// - INPUT_FIELDS: Temporary form data → N8N payload → cleared after send
+// - PERSISTENT_FIELDS: Database columns → display/edit → real-time updates
 // ==========================================
 
 "use client";
@@ -30,23 +35,34 @@ import { Label } from "~/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { toast } from "sonner";
 
-// TEMPLATE PATTERN: Field Configuration
-// Clear separation between input fields and persistent fields
+// ==========================================
+// 🔧 CUSTOMIZE THIS SECTION FOR YOUR USE CASE
+// ==========================================
 
-// Input fields - form data sent to N8N (no database persistence needed)
+// ✅ ALWAYS CUSTOMIZE: Replace with your form fields
+// These fields create form inputs that send data to N8N
 const INPUT_FIELDS = [
-  'orderDescription',
-  'urgencyLevel'
+  'orderDescription',   // Example: Replace with your input field names
+  'urgencyLevel'        // Example: Replace with your input field names
 ];
 
-// Persistent fields - store N8N results or user-specific data (require database columns)
+// ✅ ALWAYS CUSTOMIZE: Replace with your database fields  
+// These fields store N8N results and user data (require database columns)
 const PERSISTENT_FIELDS = [
-  'aiRecommendation',  // N8N analysis result (read-only)
-  'finalDecision'      // User can edit this field and save back
+  'aiRecommendation',  // Example: N8N analysis result (read-only)
+  'finalDecision'      // Example: User can edit this field and save back
 ];
+
+// 💡 TEMPLATE ADAPTATION EXAMPLES:
+// E-commerce: INPUT_FIELDS = ['customerEmail', 'productSku', 'orderQuantity']
+// Support: INPUT_FIELDS = ['ticketSubject', 'issueCategory', 'priorityLevel']
+// Content: INPUT_FIELDS = ['articleTitle', 'contentType', 'publishDate']
+// ==========================================
 
 export function N8nDemoClient() {
-  // TEMPLATE PATTERN: Required State Management
+  // ==========================================
+  // ❌ NEVER MODIFY: Core Template State Management
+  // ==========================================
   const utils = clientApi.useUtils();
   
   // Input form data (gets cleared after sending to N8N)
@@ -84,7 +100,9 @@ export function N8nDemoClient() {
     }));
   };
 
-  // tRPC queries and mutations
+  // ==========================================
+  // ❌ NEVER MODIFY: Core Template tRPC Queries & Mutations
+  // ==========================================
   const {
     data: userData,
     refetch: refetchUserData,
@@ -157,7 +175,9 @@ export function N8nDemoClient() {
     enabled: false,
   });
 
-  // TEMPLATE PATTERN: Real-Time Updates via SSE
+  // ==========================================
+  // ❌ NEVER MODIFY: Core Template Real-Time Updates via SSE
+  // ==========================================
   useEffect(() => {
     const eventSource = new EventSource("/api/stream/user-updates");
     eventSourceRef.current = eventSource;
@@ -272,11 +292,13 @@ export function N8nDemoClient() {
     <div className="flex min-h-screen flex-col items-center justify-center p-4">
       <div className="w-full max-w-6xl space-y-6">
         
-        {/* Header */}
+        {/* ==========================================
+            🎨 OPTIONALLY CUSTOMIZE: Page Header & Description
+            ========================================== */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center justify-between">
-              N8N Integration Demo - Dynamic Field Handling
+              N8N Integration Demo - Dynamic Field Handling {/* ✅ CUSTOMIZE: Update page title */}
               <div className="flex items-center space-x-2">
                 <div className={`w-3 h-3 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`} />
                 <span className="text-sm text-muted-foreground">
@@ -287,6 +309,7 @@ export function N8nDemoClient() {
           </CardHeader>
           <CardContent>
             <div className="space-y-2 text-sm text-muted-foreground">
+              {/* ✅ CUSTOMIZE: Update description for your use case */}
               <p>
                 <strong>Demo Pattern:</strong> This demo shows clear separation between input fields and persistent fields.
               </p>
@@ -302,10 +325,12 @@ export function N8nDemoClient() {
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           
-          {/* Input Section */}
+          {/* ==========================================
+              🎨 OPTIONALLY CUSTOMIZE: Input Fields UI
+              ========================================== */}
           <Card>
             <CardHeader>
-              <CardTitle>Input Section</CardTitle>
+              <CardTitle>Input Section</CardTitle> {/* ✅ CUSTOMIZE: Update section title */}
               <p className="text-sm text-muted-foreground">
                 Form inputs sent to N8N (no database persistence needed)
               </p>
@@ -314,14 +339,16 @@ export function N8nDemoClient() {
               {INPUT_FIELDS.map((fieldName) => (
                 <div key={fieldName} className="space-y-2">
                   <Label htmlFor={`${fieldName}-input`}>
+                    {/* ✅ CUSTOMIZE: Update field label logic for your use case */}
                     {fieldName.charAt(0).toUpperCase() + fieldName.slice(1).replace(/([A-Z])/g, ' $1')}
                   </Label>
                   <Input
                     id={`${fieldName}-input`}
                     value={inputData[fieldName] ?? ""}
                     onChange={(e) => updateInputField(fieldName, e.target.value)}
-                    placeholder={`Enter ${fieldName}`}
+                    placeholder={`Enter ${fieldName}`} // ✅ CUSTOMIZE: Update placeholder text
                     disabled={isSendingToN8n}
+                    // ✅ CUSTOMIZE: Add field-specific validation, styling, etc.
                   />
                 </div>
               ))}
@@ -331,6 +358,7 @@ export function N8nDemoClient() {
                 disabled={isSendingToN8n}
                 className="w-full"
               >
+                {/* ✅ CUSTOMIZE: Update button text for your use case */}
                 {isSendingToN8n ? "Sending to N8N..." : "Send to N8N"}
               </Button>
               

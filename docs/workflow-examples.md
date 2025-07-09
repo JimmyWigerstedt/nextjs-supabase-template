@@ -5,7 +5,7 @@ This document showcases example payloads and responses when calling n8n workflow
 ## Example Input
 
 ```typescript
-clientApi.n8n.template.processTemplate.mutate({
+clientApi.internal.sendToN8n.mutate({
   data: { sample: "data" },
   action: "process"
 });
