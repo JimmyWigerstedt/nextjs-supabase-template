@@ -9,16 +9,12 @@ interface BillingToggleProps {
   value: BillingInterval;
   onChange: (interval: BillingInterval) => void;
   className?: string;
-  yearlyLabel?: string;
-  monthlyLabel?: string;
 }
 
 export function BillingToggle({ 
   value, 
   onChange, 
-  className,
-  yearlyLabel = "Annual",
-  monthlyLabel = "Monthly"
+  className
 }: BillingToggleProps) {
   return (
     <div className={cn("flex items-center justify-center", className)}>
@@ -34,7 +30,7 @@ export function BillingToggle({
               : "text-gray-600 hover:text-gray-900"
           )}
         >
-          {monthlyLabel}
+          Monthly
         </Button>
         <Button
           variant={value === 'yearly' ? 'default' : 'ghost'}
@@ -47,39 +43,9 @@ export function BillingToggle({
               : "text-gray-600 hover:text-gray-900"
           )}
         >
-          {yearlyLabel}
+          Annual
         </Button>
       </div>
-    </div>
-  );
-}
-
-interface BillingToggleWithSavingsProps extends BillingToggleProps {
-  savings?: number;
-  showSavings?: boolean;
-}
-
-export function BillingToggleWithSavings({
-  savings,
-  showSavings = true,
-  yearlyLabel = "Annual",
-  ...props
-}: BillingToggleWithSavingsProps) {
-  const displayLabel = showSavings && savings && savings > 0
-    ? `${yearlyLabel} (Save ${savings}%)`
-    : yearlyLabel;
-
-  return (
-    <div className="flex flex-col items-center space-y-2">
-      <BillingToggle
-        {...props}
-        yearlyLabel={displayLabel}
-      />
-      {showSavings && savings && savings > 0 && (
-        <div className="text-sm text-green-600 font-medium">
-          Save {savings}% with annual billing
-        </div>
-      )}
     </div>
   );
 } 
