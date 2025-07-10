@@ -383,8 +383,11 @@ export class SubscriptionService {
       // SECOND: Check parent subscription details metadata
       for (const lineItem of invoice.lines.data) {
         // Type-safe access to nested parent metadata
-        const parent = lineItem.parent as any;
-        const parentUserId = parent?.subscription_details?.metadata?.user_id || 
+        const parent = lineItem.parent as {
+          subscription_details?: { metadata?: { user_id?: string } };
+          subscription_item_details?: { metadata?: { user_id?: string } };
+        };
+        const parentUserId = parent?.subscription_details?.metadata?.user_id ?? 
                            parent?.subscription_item_details?.metadata?.user_id;
         if (parentUserId) {
           console.log(`[credits] Found user_id in parent subscription details: ${parentUserId}`);
