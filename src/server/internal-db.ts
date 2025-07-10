@@ -78,9 +78,15 @@ export const ensureUidConstraintOnce = async () => {
     `, [env.NC_SCHEMA]);
     
     if (tableCheck.rows.length === 0) {
-      console.log(`[internal-db] ❌ Table "userData" not found in schema "${env.NC_SCHEMA}"`);
-      console.log(`[internal-db] ⚠️ Please run the database initialization script first`);
-      return;
+      console.log(`[internal-db] 📝 Creating userData table...`);
+      await client.query(`
+        CREATE TABLE "${env.NC_SCHEMA}"."userData" (
+          "UID" VARCHAR PRIMARY KEY,
+          "created_at" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          "updated_at" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+      console.log(`[internal-db] ✅ userData table created successfully`);
     } else {
       console.log(`[internal-db] ✅ Table "userData" exists in schema "${env.NC_SCHEMA}"`);
     }
