@@ -136,11 +136,24 @@ export const internalRouter = createTRPCRouter({
       z.record(z.string(), z.string())
     )
     .mutation(async ({ input, ctx }) => {
+      const client = await internalDb.connect();
       try {
-        // Use the existing n8n client infrastructure
+        // Get user's current usage_credits from database
+        const userDataResult = await client.query(
+          `SELECT "usage_credits" FROM "${env.NC_SCHEMA}"."userData" WHERE "UID" = $1`,
+          [ctx.supabaseUser!.id]
+        );
+        
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        const userData = userDataResult.rows[0] as { usage_credits?: string | number } | undefined;
+        const usageCredits = userData?.usage_credits ? 
+          (typeof userData.usage_credits === 'string' ? parseInt(userData.usage_credits, 10) : userData.usage_credits) : 0;
+        
+        // Use the existing n8n client infrastructure with usage_credits included
         const payload = {
           user_id: ctx.supabaseUser!.id,
           user_email: ctx.supabaseUser!.email,
+          usage_credits: usageCredits, // Include current usage credits
           data: input, // Pass all input fields directly
           action: "process",
         };
@@ -171,6 +184,8 @@ export const internalRouter = createTRPCRouter({
       } catch (error) {
         console.error('Failed to send to n8n:', error);
         throw new Error(`Failed to send to n8n: ${error instanceof Error ? error.message : String(error)}`);
+      } finally {
+        client.release();
       }
     }),
   getUserData: authorizedProcedure.query(async ({ ctx }) => {
