@@ -44,48 +44,36 @@ internalDb.on('error', (err) => {
   console.error('[internal-db] Database pool error:', err);
 });
 
-// Ensure UID constraint exists without creating tables
-export const ensureUidConstraintOnce = async () => {
-  console.log('[internal-db] Checking UID constraint...');
-  const client = await internalDb.connect();
-  try {
-    // Check if UID unique constraint exists
-    const constraintCheck = await client.query(`
-      SELECT constraint_name 
-      FROM information_schema.table_constraints 
-      WHERE table_name = 'userData' 
-      AND constraint_type IN ('UNIQUE', 'PRIMARY KEY')
-      AND constraint_name ILIKE '%uid%'
-    `);
-    
-    // Add unique constraint if it doesn't exist
-    if (constraintCheck.rows.length === 0) {
-      await client.query(`
-        ALTER TABLE "${env.NC_SCHEMA}"."userData" 
-        ADD CONSTRAINT unique_uid UNIQUE ("UID")
-      `);
-      console.log('[internal-db] ✅ Added unique constraint to UID');
-    } else {
-      console.log('[internal-db] ✅ UID constraint already exists');
-    }
-  } catch (error) {
-    // Constraint might already exist with different name, or UID is already primary key
-    console.log('[internal-db] UID constraint check:', error instanceof Error ? error.message : String(error));
-  } finally {
-    client.release();
-  }
-};
 
-// Ensure minimal Stripe subscription fields exist
-export const ensureStripeFieldsOnce = async () => {
-  console.log('[internal-db] Checking minimal Stripe subscription fields...');
+
+// Ensure complete database setup: schema, table, and fields
+export const ensureCompleteDatabaseSetup = async () => {
+  console.log('[internal-db] Starting complete database setup...');
   let client;
   
   try {
     client = await internalDb.connect();
     
-    // Define the minimal Stripe fields that should exist (Stripe-first approach)
-    const stripeFields = [
+    // 1. Ensure schema exists
+    console.log('[internal-db] Creating schema if needed...');
+    await client.query(`CREATE SCHEMA IF NOT EXISTS "${env.NC_SCHEMA}"`);
+    console.log(`[internal-db] ✅ Schema "${env.NC_SCHEMA}" ready`);
+    
+    // 2. Ensure userData table exists with core fields
+    console.log('[internal-db] Creating userData table if needed...');
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS "${env.NC_SCHEMA}"."userData" (
+        "UID" VARCHAR PRIMARY KEY,
+        "aiRecommendation" VARCHAR,
+        "finalDecision" VARCHAR,
+        "created_at" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        "updated_at" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    console.log('[internal-db] ✅ userData table ready');
+    
+    // 3. Ensure all application fields exist (both core and Stripe)
+    const allFields = [
       'stripe_customer_id',
       'stripe_subscription_id', 
       'subscription_plan',
@@ -93,7 +81,7 @@ export const ensureStripeFieldsOnce = async () => {
       'usage_credits'
     ];
     
-    // Field type mapping for Stripe fields
+    // Field type mapping
     const getFieldType = (fieldName: string): string => {
       switch (fieldName) {
         case 'usage_credits':
@@ -103,7 +91,7 @@ export const ensureStripeFieldsOnce = async () => {
       }
     };
 
-    for (const field of stripeFields) {
+    for (const field of allFields) {
       try {
         // Check if field exists
         const fieldCheck = await client.query(`
@@ -128,7 +116,7 @@ export const ensureStripeFieldsOnce = async () => {
       }
     }
     
-    console.log('[internal-db] ✅ Stripe fields check complete');
+    console.log('[internal-db] ✅ Complete database setup finished');
   } catch (error) {
     console.error('[internal-db] ❌ Stripe fields check failed:', error instanceof Error ? error.message : String(error));
   } finally {
@@ -146,10 +134,7 @@ if (process.env.NODE_ENV !== 'test') {
   setTimeout(() => {
     console.log('[internal-db] ⏰ Running post-deployment field creation...');
     
-    Promise.all([
-      ensureUidConstraintOnce(),
-      ensureStripeFieldsOnce()
-    ]).then(() => {
+    ensureCompleteDatabaseSetup().then(() => {
       console.log('[internal-db] 🎉 Post-deployment field creation completed successfully!');
     }).catch((error) => {
       console.error('[internal-db] ❌ Post-deployment field creation failed:', error instanceof Error ? error.message : String(error));

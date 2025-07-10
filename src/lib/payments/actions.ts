@@ -33,8 +33,8 @@ export const paymentsRouter = createTRPCRouter({
         const baseCredits = parseInt(product.metadata.usage_credits ?? '0', 10);
         // Handle invalid string values that result in NaN
         const validBaseCredits = isNaN(baseCredits) ? 0 : baseCredits;
-        // For yearly prices, multiply by 12
-        usageCredits = price.recurring?.interval === 'year' ? validBaseCredits * 12 : validBaseCredits;
+        // Store only base credits - webhook handler will apply multiplication
+        usageCredits = validBaseCredits;
       }
       
       // Create checkout session with usage credits in metadata
