@@ -38,20 +38,52 @@ export async function POST(request: NextRequest) {
 
   try {
     switch (event.type) {
-      case 'customer.subscription.created':
-      case 'customer.subscription.updated':
-      case 'customer.subscription.deleted':
-        const subscription = event.data.object;
-        console.log(`[webhook] Syncing subscription: ${subscription.id}`);
+      case 'invoice.payment_succeeded':
+        const invoice = event.data.object;
+        console.log(`[webhook] Invoice payment succeeded: ${invoice.id}`);
         
         /**
-         * Subscription lifecycle event processing
+         * Payment-first credit allocation
          * 
-         * Implementation notes: Handles subscription state changes by updating local
-         * cache with comprehensive metadata including plan resolution via Stripe API.
-         * Includes customer_id, subscription_id, resolved plan name, and status.
+         * Implementation notes: Processes invoice payment to allocate credits only when
+         * money is actually collected. Uses billing_reason to determine ADD vs REPLACE
+         * logic and includes proper idempotency protection.
          */
-        await subscriptionService.syncSubscriptionFromWebhook(subscription);
+        
+        // Validate invoice ID
+        if (!invoice.id) {
+          console.error('[webhook] Invoice has no ID');
+          break;
+        }
+        
+        // Extract user ID from invoice subscription metadata
+        const userId = await subscriptionService.extractUserIdFromInvoice(invoice);
+        if (!userId) {
+          console.error('[webhook] No user_id found in invoice');
+          break;
+        }
+        
+        // Check idempotency to prevent duplicate processing
+        if (await subscriptionService.isInvoiceProcessed(invoice.id)) {
+          console.log(`[webhook] Invoice ${invoice.id} already processed, skipping`);
+          break;
+        }
+        
+        // Calculate credits from invoice line items
+        const totalCredits = await subscriptionService.calculateCreditsFromInvoice(invoice);
+        
+        if (totalCredits > 0) {
+          // Allocate credits based on billing reason
+          const billingReason = invoice.billing_reason ?? 'manual';
+          await subscriptionService.handleCreditAllocation(billingReason, userId, totalCredits);
+          
+          // Mark invoice as processed for idempotency
+          await subscriptionService.markInvoiceProcessed(invoice.id);
+          
+          console.log(`[webhook] ✅ Allocated ${totalCredits} credits to user ${userId} for invoice ${invoice.id}`);
+        } else {
+          console.log(`[webhook] No credits found in invoice ${invoice.id}`);
+        }
         break;
       
       case 'checkout.session.completed':

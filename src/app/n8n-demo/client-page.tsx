@@ -546,7 +546,7 @@ npm run add-field finalDecision`}
 }`}
                 </pre>
                 <p className="text-xs text-muted-foreground mt-2">
-                  <strong>usage_credits:</strong> Current user&apos;s available credits (integer) from their subscription plan
+                  <strong>usage_credits:</strong> Current user&apos;s available credits (integer) allocated via invoice payment processing
                 </p>
               </div>
               
@@ -577,7 +577,7 @@ npm run add-field finalDecision`}
                   <li>7. Watch persistent fields update automatically with highlighting</li>
                 </ol>
                 <p className="text-xs text-muted-foreground mt-2">
-                  <strong>Usage Credits:</strong> Use the included credits value for quota enforcement, billing calculations, or feature gating
+                  <strong>Usage Credits:</strong> Use the included credits value for quota enforcement, billing calculations, or feature gating. Credits are allocated when invoice payments succeed, not when subscriptions change.
                 </p>
               </div>
             </div>
