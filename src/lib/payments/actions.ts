@@ -20,7 +20,24 @@ export const paymentsRouter = createTRPCRouter({
       // Ensure we have a Stripe customer
       const customerId = await subscriptionService.ensureStripeCustomer(user.id, user.email!);
       
-      // Create simple checkout session
+      // Fetch price with expanded product to get usage credits
+      const price = await stripe.prices.retrieve(input.priceId, {
+        expand: ['product']
+      });
+      
+      // Extract usage credits from product metadata
+      const product = price.product;
+      let usageCredits = 0;
+      
+      if (typeof product !== 'string' && product && 'metadata' in product) {
+        const baseCredits = parseInt(product.metadata.usage_credits ?? '0', 10);
+        // Handle invalid string values that result in NaN
+        const validBaseCredits = isNaN(baseCredits) ? 0 : baseCredits;
+        // For yearly prices, multiply by 12
+        usageCredits = price.recurring?.interval === 'year' ? validBaseCredits * 12 : validBaseCredits;
+      }
+      
+      // Create checkout session with usage credits in metadata
       const session = await stripe.checkout.sessions.create({
         payment_method_types: ['card'],
         line_items: [
@@ -39,6 +56,7 @@ export const paymentsRouter = createTRPCRouter({
         subscription_data: {
           metadata: {
             user_id: user.id,
+            usage_credits: usageCredits.toString(),
           },
         },
       });

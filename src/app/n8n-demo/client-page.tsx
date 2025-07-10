@@ -522,7 +522,7 @@ npm run add-field finalDecision`}
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
               <div>
                 <strong>User ID:</strong> {(userData as { UID?: string })?.UID ?? "Not initialized"}
               </div>
@@ -531,6 +531,16 @@ npm run add-field finalDecision`}
               </div>
               <div>
                 <strong>Last Activity:</strong> {lastUpdate ? new Date(lastUpdate).toLocaleTimeString() : "None"}
+              </div>
+              <div>
+                <strong>Usage Credits:</strong> {
+                  (() => {
+                    const credits = (userData as { usage_credits?: string | number })?.usage_credits;
+                    if (credits === null || credits === undefined) return "Not set";
+                    const creditsNum = typeof credits === 'string' ? parseInt(credits, 10) : credits;
+                    return isNaN(creditsNum) ? "Not set" : creditsNum.toLocaleString();
+                  })()
+                }
               </div>
             </div>
             

@@ -157,7 +157,7 @@ export class SubscriptionService {
    * Synchronize local subscription cache from Stripe webhook events
    * 
    * Implementation notes: Resolves plan name via product API calls and updates
-   * comprehensive local metadata (customer_id, subscription_id, plan, status)
+   * comprehensive local metadata (customer_id, subscription_id, plan, status, usage_credits)
    * Used by: Webhook event handlers for real-time sync
    */
   async syncSubscriptionFromWebhook(subscription: Stripe.Subscription): Promise<void> {
@@ -169,12 +169,19 @@ export class SubscriptionService {
 
     // Use the correct method for Stripe Subscription objects
     const planName = await getPlanNameFromStripeSubscription(subscription);
+    
+    // Extract usage credits from subscription metadata
+    const creditsFromMetadata = subscription.metadata.usage_credits ? 
+      parseInt(subscription.metadata.usage_credits, 10) : 0;
+    // Handle invalid string values that result in NaN
+    const usageCredits = isNaN(creditsFromMetadata) ? 0 : creditsFromMetadata;
 
     await updateMinimalSubscriptionData(userId, {
       stripe_customer_id: subscription.customer as string,
       stripe_subscription_id: subscription.id,
       subscription_plan: planName,
       subscription_status: subscription.status,
+      usage_credits: usageCredits,
     });
   }
 

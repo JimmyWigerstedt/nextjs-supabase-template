@@ -108,6 +108,17 @@ function PricingCard({ price }: PricingCardProps) {
   const productName = price.product?.name ?? 'Unknown Plan';
   const displayInterval = price.interval ?? 'month';
 
+  // Extract usage credits from product metadata
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
+  const creditsMetadata = price.product?.metadata?.usage_credits;
+  const baseCredits = parseInt(typeof creditsMetadata === 'string' ? creditsMetadata : '0', 10);
+  // Handle invalid string values that result in NaN
+  const validBaseCredits = isNaN(baseCredits) ? 0 : baseCredits;
+  const displayCredits = price.interval === 'year' ? validBaseCredits * 12 : validBaseCredits;
+  const creditsText = displayCredits > 0 ? 
+    `${displayCredits.toLocaleString()} credits/${displayInterval}` : 
+    'No credits included';
+
   // Simple features based on price tier
   const features = getSimpleFeatures(displayPrice);
 
@@ -119,6 +130,11 @@ function PricingCard({ price }: PricingCardProps) {
           <span className="text-4xl font-bold text-gray-900">${displayPrice}</span>
           <span className="text-gray-600">/{displayInterval}</span>
         </div>
+        {displayCredits > 0 && (
+          <div className="mt-2 text-sm font-medium text-blue-600">
+            {creditsText}
+          </div>
+        )}
       </div>
 
       <ul className="space-y-3 mb-8">

@@ -14,6 +14,7 @@ export interface MinimalSubscriptionData {
   stripe_subscription_id?: string;
   subscription_plan?: string;
   subscription_status?: string;
+  usage_credits?: number;
 }
 
 /**
@@ -123,7 +124,8 @@ export async function getMinimalSubscriptionData(userId: string): Promise<Minima
         "stripe_customer_id",
         "stripe_subscription_id", 
         "subscription_plan",
-        "subscription_status"
+        "subscription_status",
+        "usage_credits"
       FROM "${env.NC_SCHEMA}"."userData" 
       WHERE "UID" = $1`,
       [userId]
@@ -141,6 +143,10 @@ export async function getMinimalSubscriptionData(userId: string): Promise<Minima
       stripe_subscription_id: row.stripe_subscription_id ?? undefined,
       subscription_plan: row.subscription_plan ?? undefined,
       subscription_status: row.subscription_status ?? undefined,
+      usage_credits: row.usage_credits ? (() => {
+        const credits = parseInt(row.usage_credits, 10);
+        return isNaN(credits) ? undefined : credits;
+      })() : undefined,
     };
   } catch (error) {
     console.error('Failed to get minimal subscription data:', error);
@@ -166,7 +172,8 @@ export async function clearSubscriptionData(userId: string): Promise<void> {
        SET "stripe_customer_id" = NULL,
            "stripe_subscription_id" = NULL,
            "subscription_plan" = NULL,
-           "subscription_status" = NULL
+           "subscription_status" = NULL,
+           "usage_credits" = NULL
        WHERE "UID" = $1`,
       [userId]
     );
