@@ -361,14 +361,39 @@ export class SubscriptionService {
   }
 
   /**
-   * Extract user ID from invoice via subscription metadata
+   * Extract user ID from invoice using cache-first strategy
    * 
-   * Implementation notes: Retrieves subscription from invoice and extracts user_id from metadata
+   * Implementation notes: Uses multi-tier approach to avoid unnecessary API calls:
+   * 1. Check line item metadata (most reliable)
+   * 2. Check parent subscription details metadata
+   * 3. Fallback to API call to subscription metadata (last resort)
    * Used by: Invoice payment processing to identify the user
    */
   async extractUserIdFromInvoice(invoice: Stripe.Invoice): Promise<string | null> {
     try {
-      // Type-safe access to subscription property
+      // FIRST: Check line item metadata (most reliable)
+      for (const lineItem of invoice.lines.data) {
+        const userId = lineItem.metadata?.user_id;
+        if (userId) {
+          console.log(`[credits] Found user_id in line item metadata: ${userId}`);
+          return userId;
+        }
+      }
+      
+      // SECOND: Check parent subscription details metadata
+      for (const lineItem of invoice.lines.data) {
+        // Type-safe access to nested parent metadata
+        const parent = lineItem.parent as any;
+        const parentUserId = parent?.subscription_details?.metadata?.user_id || 
+                           parent?.subscription_item_details?.metadata?.user_id;
+        if (parentUserId) {
+          console.log(`[credits] Found user_id in parent subscription details: ${parentUserId}`);
+          return parentUserId;
+        }
+      }
+      
+      // THIRD: Fallback to API call (existing behavior)
+      console.log(`[credits] No user_id found in invoice payload, falling back to API call`);
       const subscriptionId = (invoice as Stripe.Invoice & { subscription?: string }).subscription;
       if (!subscriptionId) {
         console.log(`[credits] Invoice ${invoice.id} has no subscription`);
@@ -383,6 +408,7 @@ export class SubscriptionService {
         return null;
       }
       
+      console.log(`[credits] Found user_id via API call: ${userId}`);
       return userId;
     } catch (error) {
       console.error(`[credits] Error extracting user ID from invoice ${invoice.id}:`, error);
