@@ -47,14 +47,26 @@ export function PricingPageClient() {
     <div className="space-y-8">
       {/* Current Subscription Status */}
       {currentSubscription && (
-        <div className="rounded-lg border-2 border-green-500 bg-green-50 p-6 text-center">
+        <div className={`rounded-lg border-2 p-6 text-center ${
+          currentSubscription.status === 'past_due' 
+            ? 'border-yellow-500 bg-yellow-50' 
+            : 'border-green-500 bg-green-50'
+        }`}>
           <div className="flex items-center justify-center space-x-2">
-            <Crown className="h-5 w-5 text-green-600" />
-            <span className="font-semibold text-green-800">
-              You have an active subscription
+            <Crown className={`h-5 w-5 ${
+              currentSubscription.status === 'past_due' ? 'text-yellow-600' : 'text-green-600'
+            }`} />
+            <span className={`font-semibold ${
+              currentSubscription.status === 'past_due' ? 'text-yellow-800' : 'text-green-800'
+            }`}>
+              {currentSubscription.status === 'past_due' 
+                ? 'Payment issue - update payment' 
+                : 'You have an active subscription'}
             </span>
           </div>
-          <p className="text-sm text-green-700 mt-2">
+          <p className={`text-sm mt-2 ${
+            currentSubscription.status === 'past_due' ? 'text-yellow-700' : 'text-green-700'
+          }`}>
             Use the &quot;Manage Subscription&quot; button to make changes
           </p>
         </div>

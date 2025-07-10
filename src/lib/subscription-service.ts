@@ -14,6 +14,16 @@ import { stripe } from "./payments/stripe";
 
 export class SubscriptionService {
   /**
+   * Define subscription statuses that should be considered "active" for UI purposes
+   * 
+   * Implementation notes: These statuses should show a subscription banner in the UI
+   * Used by: getActiveSubscription() to filter out ended subscriptions
+   */
+  private getUIActiveStatuses(): string[] {
+    return ['active', 'trialing', 'past_due'];
+  }
+
+  /**
    * Retrieve cached subscription metadata from local database
    * 
    * Implementation notes: Database query to userData table for Stripe identifiers and plan info
@@ -28,7 +38,7 @@ export class SubscriptionService {
    * 
    * Implementation notes: Complex multi-step process:
    * 1. Check local cache for subscription_id
-   * 2. If found, direct Stripe API lookup
+   * 2. If found, direct Stripe API lookup (filtered by UI-active statuses)
    * 3. If missing, search customer's active subscriptions
    * 4. Update local cache with discovered subscription
    * Used by: Subscription display, billing portal, feature access checks
@@ -44,6 +54,12 @@ export class SubscriptionService {
       // If we have a subscription ID, fetch it directly
       if (localData.stripe_subscription_id) {
         const subscription = await stripe.subscriptions.retrieve(localData.stripe_subscription_id);
+        
+        // Filter out ended subscriptions - only return UI-active statuses
+        if (!this.getUIActiveStatuses().includes(subscription.status)) {
+          return null;
+        }
+        
         return this.formatSubscriptionData(subscription);
       }
 
@@ -170,11 +186,23 @@ export class SubscriptionService {
     // Use the correct method for Stripe Subscription objects
     const planName = await getPlanNameFromStripeSubscription(subscription);
     
-    // Extract usage credits from subscription metadata
+    // Extract base usage credits from subscription metadata
     const creditsFromMetadata = subscription.metadata.usage_credits ? 
       parseInt(subscription.metadata.usage_credits, 10) : 0;
     // Handle invalid string values that result in NaN
-    const usageCredits = isNaN(creditsFromMetadata) ? 0 : creditsFromMetadata;
+    const baseCredits = isNaN(creditsFromMetadata) ? 0 : creditsFromMetadata;
+    
+    // Calculate final credits based on billing interval (same logic as checkout)
+    let usageCredits = baseCredits;
+    if (subscription.items.data.length > 0) {
+      const price = subscription.items.data[0]?.price;
+      if (price?.recurring?.interval === 'year') {
+        usageCredits = baseCredits * 12;
+        console.log(`[webhook] Yearly subscription detected. Base credits: ${baseCredits}, Final credits: ${usageCredits}`);
+      } else {
+        console.log(`[webhook] Monthly subscription detected. Credits: ${usageCredits}`);
+      }
+    }
 
     await updateMinimalSubscriptionData(userId, {
       stripe_customer_id: subscription.customer as string,
