@@ -89,12 +89,18 @@ export const ensureStripeFieldsOnce = async () => {
       'stripe_customer_id',
       'stripe_subscription_id', 
       'subscription_plan',
-      'subscription_status'
+      'subscription_status',
+      'usage_credits'
     ];
     
-    // All new minimal fields are VARCHAR
-    const getFieldType = (_fieldName: string): string => {
-      return 'VARCHAR';
+    // Field type mapping for Stripe fields
+    const getFieldType = (fieldName: string): string => {
+      switch (fieldName) {
+        case 'usage_credits':
+          return 'INTEGER DEFAULT 0';
+        default:
+          return 'VARCHAR';
+      }
     };
 
     for (const field of stripeFields) {

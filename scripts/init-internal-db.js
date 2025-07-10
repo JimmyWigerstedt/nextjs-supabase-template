@@ -58,7 +58,8 @@ async function initializeInternalDatabase() {
       'currentPeriodEnd',
       'trialEnd',
       'cancelAtPeriodEnd',
-      'priceId'
+      'priceId',
+      'usage_credits'
     ];
     
     // Define field types for proper column creation
@@ -80,6 +81,8 @@ async function initializeInternalDatabase() {
           return 'TIMESTAMP';
         case 'cancelAtPeriodEnd':
           return 'BOOLEAN DEFAULT FALSE';
+        case 'usage_credits':
+          return 'INTEGER DEFAULT 0';
         default:
           return 'VARCHAR';
       }

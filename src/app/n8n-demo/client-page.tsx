@@ -299,11 +299,26 @@ export function N8nDemoClient() {
           <CardHeader>
             <CardTitle className="flex items-center justify-between">
               N8N Integration Demo - Dynamic Field Handling {/* ✅ CUSTOMIZE: Update page title */}
-              <div className="flex items-center space-x-2">
-                <div className={`w-3 h-3 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`} />
-                <span className="text-sm text-muted-foreground">
-                  {isConnected ? 'Live Updates Connected' : 'Disconnected'}
-                </span>
+              <div className="flex items-center space-x-4">
+                {/* Usage Credits Counter */}
+                <div className="flex items-center space-x-2 px-3 py-1 bg-blue-50 rounded-full border">
+                  <div className="w-2 h-2 rounded-full bg-blue-500" />
+                  <span className="text-sm font-medium text-blue-700">
+                    {(() => {
+                      const credits = (userData as { usage_credits?: string | number })?.usage_credits;
+                      if (credits === null || credits === undefined) return "Credits: Not set";
+                      const creditsNum = typeof credits === 'string' ? parseInt(credits, 10) : credits;
+                      return isNaN(creditsNum) ? "Credits: Not set" : `Credits: ${creditsNum.toLocaleString()}`;
+                    })()}
+                  </span>
+                </div>
+                {/* Connection Status */}
+                <div className="flex items-center space-x-2">
+                  <div className={`w-3 h-3 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`} />
+                  <span className="text-sm text-muted-foreground">
+                    {isConnected ? 'Live Updates Connected' : 'Disconnected'}
+                  </span>
+                </div>
               </div>
             </CardTitle>
           </CardHeader>
@@ -319,6 +334,72 @@ export function N8nDemoClient() {
               <p>
                 <strong>Persistent Fields:</strong> Store N8N results or user-specific data (require database columns)
               </p>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Usage Credits Overview */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center space-x-2">
+              <div className="w-4 h-4 rounded-full bg-blue-500" />
+              <span>Usage Credits Overview</span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+                <div className="text-2xl font-bold text-blue-700">
+                  {(() => {
+                    const credits = (userData as { usage_credits?: string | number })?.usage_credits;
+                    if (credits === null || credits === undefined) return "—";
+                    const creditsNum = typeof credits === 'string' ? parseInt(credits, 10) : credits;
+                    return isNaN(creditsNum) ? "—" : creditsNum.toLocaleString();
+                  })()}
+                </div>
+                <div className="text-sm text-blue-600 font-medium">Available Credits</div>
+                <div className="text-xs text-muted-foreground mt-1">
+                  From your subscription plan
+                </div>
+              </div>
+              
+              <div className="p-4 bg-green-50 rounded-lg border border-green-200">
+                <div className="text-2xl font-bold text-green-700">
+                  {(() => {
+                    const credits = (userData as { usage_credits?: string | number })?.usage_credits;
+                    if (credits === null || credits === undefined) return "—";
+                    const creditsNum = typeof credits === 'string' ? parseInt(credits, 10) : credits;
+                    if (isNaN(creditsNum)) return "—";
+                    
+                    // Simple status based on credit amount
+                    if (creditsNum > 500) return "High";
+                    if (creditsNum > 100) return "Medium";
+                    if (creditsNum > 0) return "Low";
+                    return "Empty";
+                  })()}
+                </div>
+                <div className="text-sm text-green-600 font-medium">Credit Status</div>
+                <div className="text-xs text-muted-foreground mt-1">
+                  Current usage level
+                </div>
+              </div>
+              
+              <div className="p-4 bg-orange-50 rounded-lg border border-orange-200">
+                <div className="text-2xl font-bold text-orange-700">
+                  ∞
+                </div>
+                <div className="text-sm text-orange-600 font-medium">Monthly Quota</div>
+                <div className="text-xs text-muted-foreground mt-1">
+                  Resets with billing cycle
+                </div>
+              </div>
+            </div>
+            
+            <div className="mt-4 p-3 bg-gray-50 rounded-md">
+              <div className="text-sm text-muted-foreground">
+                <strong>How Credits Work:</strong> Each N8N request includes your current credit balance. 
+                Your N8N workflow can check available credits and optionally deduct them for usage-based billing.
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -456,6 +537,7 @@ npm run add-field finalDecision`}
 {`{
   "user_id": "user-uuid-here",
   "user_email": "user@example.com",
+  "usage_credits": 1000,
   "data": {
     "orderDescription": "user_input_value",
     "urgencyLevel": "user_input_value"
@@ -463,6 +545,9 @@ npm run add-field finalDecision`}
   "action": "process"
 }`}
                 </pre>
+                <p className="text-xs text-muted-foreground mt-2">
+                  <strong>usage_credits:</strong> Current user&apos;s available credits (integer) from their subscription plan
+                </p>
               </div>
               
               <div className="p-4 bg-orange-50 rounded-md">
@@ -484,11 +569,16 @@ npm run add-field finalDecision`}
                 <h4 className="font-semibold mb-2">🔄 Expected N8N Workflow</h4>
                 <ol className="text-sm text-muted-foreground space-y-1">
                   <li>1. Receive payload at `/webhook/your-n8n-endpoint`</li>
-                  <li>2. Process business logic (calculate costs, determine processing time, etc.)</li>
-                  <li>3. Update database directly with calculated values</li>
-                  <li>4. Send webhook back to `/api/webhooks/internal-updated` with updated field names</li>
-                  <li>5. Watch persistent fields update automatically with highlighting</li>
+                  <li>2. Check user&apos;s <strong>usage_credits</strong> for available quota</li>
+                  <li>3. Process business logic (calculate costs, determine processing time, etc.)</li>
+                  <li>4. Optionally deduct credits by updating <strong>usage_credits</strong> field</li>
+                  <li>5. Update database directly with calculated values</li>
+                  <li>6. Send webhook back to `/api/webhooks/internal-updated` with updated field names</li>
+                  <li>7. Watch persistent fields update automatically with highlighting</li>
                 </ol>
+                <p className="text-xs text-muted-foreground mt-2">
+                  <strong>Usage Credits:</strong> Use the included credits value for quota enforcement, billing calculations, or feature gating
+                </p>
               </div>
             </div>
           </CardContent>
@@ -522,7 +612,7 @@ npm run add-field finalDecision`}
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
               <div>
                 <strong>User ID:</strong> {(userData as { UID?: string })?.UID ?? "Not initialized"}
               </div>
@@ -531,6 +621,16 @@ npm run add-field finalDecision`}
               </div>
               <div>
                 <strong>Last Activity:</strong> {lastUpdate ? new Date(lastUpdate).toLocaleTimeString() : "None"}
+              </div>
+              <div>
+                <strong>Usage Credits:</strong> {
+                  (() => {
+                    const credits = (userData as { usage_credits?: string | number })?.usage_credits;
+                    if (credits === null || credits === undefined) return "Not set";
+                    const creditsNum = typeof credits === 'string' ? parseInt(credits, 10) : credits;
+                    return isNaN(creditsNum) ? "Not set" : creditsNum.toLocaleString();
+                  })()
+                }
               </div>
             </div>
             

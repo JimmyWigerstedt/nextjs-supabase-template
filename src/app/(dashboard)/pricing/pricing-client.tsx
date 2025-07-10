@@ -47,14 +47,26 @@ export function PricingPageClient() {
     <div className="space-y-8">
       {/* Current Subscription Status */}
       {currentSubscription && (
-        <div className="rounded-lg border-2 border-green-500 bg-green-50 p-6 text-center">
+        <div className={`rounded-lg border-2 p-6 text-center ${
+          currentSubscription.status === 'past_due' 
+            ? 'border-yellow-500 bg-yellow-50' 
+            : 'border-green-500 bg-green-50'
+        }`}>
           <div className="flex items-center justify-center space-x-2">
-            <Crown className="h-5 w-5 text-green-600" />
-            <span className="font-semibold text-green-800">
-              You have an active subscription
+            <Crown className={`h-5 w-5 ${
+              currentSubscription.status === 'past_due' ? 'text-yellow-600' : 'text-green-600'
+            }`} />
+            <span className={`font-semibold ${
+              currentSubscription.status === 'past_due' ? 'text-yellow-800' : 'text-green-800'
+            }`}>
+              {currentSubscription.status === 'past_due' 
+                ? 'Payment issue - update payment' 
+                : 'You have an active subscription'}
             </span>
           </div>
-          <p className="text-sm text-green-700 mt-2">
+          <p className={`text-sm mt-2 ${
+            currentSubscription.status === 'past_due' ? 'text-yellow-700' : 'text-green-700'
+          }`}>
             Use the &quot;Manage Subscription&quot; button to make changes
           </p>
         </div>
@@ -108,6 +120,17 @@ function PricingCard({ price }: PricingCardProps) {
   const productName = price.product?.name ?? 'Unknown Plan';
   const displayInterval = price.interval ?? 'month';
 
+  // Extract usage credits from product metadata
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
+  const creditsMetadata = price.product?.metadata?.usage_credits;
+  const baseCredits = parseInt(typeof creditsMetadata === 'string' ? creditsMetadata : '0', 10);
+  // Handle invalid string values that result in NaN
+  const validBaseCredits = isNaN(baseCredits) ? 0 : baseCredits;
+  const displayCredits = price.interval === 'year' ? validBaseCredits * 12 : validBaseCredits;
+  const creditsText = displayCredits > 0 ? 
+    `${displayCredits.toLocaleString()} credits/${displayInterval}` : 
+    'No credits included';
+
   // Simple features based on price tier
   const features = getSimpleFeatures(displayPrice);
 
@@ -119,6 +142,11 @@ function PricingCard({ price }: PricingCardProps) {
           <span className="text-4xl font-bold text-gray-900">${displayPrice}</span>
           <span className="text-gray-600">/{displayInterval}</span>
         </div>
+        {displayCredits > 0 && (
+          <div className="mt-2 text-sm font-medium text-blue-600">
+            {creditsText}
+          </div>
+        )}
       </div>
 
       <ul className="space-y-3 mb-8">
