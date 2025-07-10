@@ -209,7 +209,9 @@ export const ensureStripeFieldsOnce = async () => {
 
 // Run field creation 2 minutes after deployment with singleton pattern
 // This ensures the app is fully running and database is accessible
-if (process.env.NODE_ENV !== 'test' && !global.fieldCreationScheduled) {
+if (process.env.NODE_ENV !== 'test' && 
+    process.env.NEXT_PHASE !== 'phase-production-build' && 
+    !global.fieldCreationScheduled) {
   global.fieldCreationScheduled = true;
   console.log('[internal-db] 🚀 Scheduling field creation for 2 minutes after deployment...');
   
