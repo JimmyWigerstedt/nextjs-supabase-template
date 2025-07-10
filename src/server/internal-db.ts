@@ -1,6 +1,12 @@
 import { Pool } from "pg";
 import { env } from "~/env";
 
+// Add global flag declaration for singleton pattern
+declare global {
+  // eslint-disable-next-line no-var
+  var fieldCreationScheduled: boolean | undefined;
+}
+
 const createInternalDbClient = () => {
   console.log('[internal-db] Creating database pool with URL:', 
     env.INTERNAL_DATABASE_URL.replace(/\/\/[^:]+:[^@]+@/, '//***:***@')
@@ -44,47 +50,107 @@ internalDb.on('error', (err) => {
   console.error('[internal-db] Database pool error:', err);
 });
 
-// Ensure UID constraint exists without creating tables
+// Enhanced UID constraint function with detailed logging
 export const ensureUidConstraintOnce = async () => {
-  console.log('[internal-db] Checking UID constraint...');
+  console.log('[internal-db] 🔍 Checking UID constraint...');
   const client = await internalDb.connect();
   try {
-    // Check if UID unique constraint exists
+    // Check if schema exists first
+    const schemaCheck = await client.query(`
+      SELECT schema_name 
+      FROM information_schema.schemata 
+      WHERE schema_name = $1
+    `, [env.NC_SCHEMA]);
+    
+    if (schemaCheck.rows.length === 0) {
+      console.log(`[internal-db] 📝 Schema "${env.NC_SCHEMA}" not found, creating...`);
+      await client.query(`CREATE SCHEMA IF NOT EXISTS "${env.NC_SCHEMA}"`);
+      console.log(`[internal-db] ✅ Schema "${env.NC_SCHEMA}" created successfully`);
+    } else {
+      console.log(`[internal-db] ✅ Schema "${env.NC_SCHEMA}" already exists`);
+    }
+
+    // Check if userData table exists
+    const tableCheck = await client.query(`
+      SELECT table_name 
+      FROM information_schema.tables 
+      WHERE table_schema = $1 AND table_name = 'userData'
+    `, [env.NC_SCHEMA]);
+    
+    if (tableCheck.rows.length === 0) {
+      console.log(`[internal-db] 📝 Creating userData table...`);
+      await client.query(`
+        CREATE TABLE "${env.NC_SCHEMA}"."userData" (
+          "UID" VARCHAR PRIMARY KEY,
+          "created_at" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          "updated_at" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+      console.log(`[internal-db] ✅ userData table created successfully`);
+    } else {
+      console.log(`[internal-db] ✅ Table "userData" exists in schema "${env.NC_SCHEMA}"`);
+    }
+    
+    // Check if UID constraint exists
     const constraintCheck = await client.query(`
       SELECT constraint_name 
       FROM information_schema.table_constraints 
-      WHERE table_name = 'userData' 
+      WHERE table_schema = $1 AND table_name = 'userData' 
       AND constraint_type IN ('UNIQUE', 'PRIMARY KEY')
       AND constraint_name ILIKE '%uid%'
-    `);
+    `, [env.NC_SCHEMA]);
     
-    // Add unique constraint if it doesn't exist
     if (constraintCheck.rows.length === 0) {
+      console.log('[internal-db] 📝 UID constraint not found, creating...');
       await client.query(`
         ALTER TABLE "${env.NC_SCHEMA}"."userData" 
         ADD CONSTRAINT unique_uid UNIQUE ("UID")
       `);
-      console.log('[internal-db] ✅ Added unique constraint to UID');
+      console.log('[internal-db] ✅ UID unique constraint created successfully');
     } else {
       console.log('[internal-db] ✅ UID constraint already exists');
     }
   } catch (error) {
-    // Constraint might already exist with different name, or UID is already primary key
-    console.log('[internal-db] UID constraint check:', error instanceof Error ? error.message : String(error));
+    console.log('[internal-db] ℹ️ UID constraint check completed with notes:', error instanceof Error ? error.message : String(error));
   } finally {
     client.release();
   }
 };
 
-// Ensure minimal Stripe subscription fields exist
+// Enhanced Stripe fields function with detailed logging
 export const ensureStripeFieldsOnce = async () => {
-  console.log('[internal-db] Checking minimal Stripe subscription fields...');
+  console.log('[internal-db] 🔍 Checking Stripe subscription fields...');
   let client;
   
   try {
     client = await internalDb.connect();
     
-    // Define the minimal Stripe fields that should exist (Stripe-first approach)
+    // Verify schema exists
+    const schemaCheck = await client.query(`
+      SELECT schema_name 
+      FROM information_schema.schemata 
+      WHERE schema_name = $1
+    `, [env.NC_SCHEMA]);
+    
+    if (schemaCheck.rows.length === 0) {
+      console.log(`[internal-db] ❌ Schema "${env.NC_SCHEMA}" not found, cannot create fields`);
+      return;
+    }
+    
+    // Verify table exists
+    const tableCheck = await client.query(`
+      SELECT table_name 
+      FROM information_schema.tables 
+      WHERE table_schema = $1 AND table_name = 'userData'
+    `, [env.NC_SCHEMA]);
+    
+    if (tableCheck.rows.length === 0) {
+      console.log(`[internal-db] ❌ Table "userData" not found, cannot create fields`);
+      return;
+    }
+    
+    console.log(`[internal-db] ✅ Schema and table verified, proceeding with field creation...`);
+    
     const stripeFields = [
       'stripe_customer_id',
       'stripe_subscription_id', 
@@ -93,7 +159,7 @@ export const ensureStripeFieldsOnce = async () => {
       'usage_credits'
     ];
     
-    // Field type mapping for Stripe fields
+    // Field type mapping
     const getFieldType = (fieldName: string): string => {
       switch (fieldName) {
         case 'usage_credits':
@@ -103,6 +169,9 @@ export const ensureStripeFieldsOnce = async () => {
       }
     };
 
+    let fieldsCreated = 0;
+    let fieldsExisted = 0;
+    
     for (const field of stripeFields) {
       try {
         // Check if field exists
@@ -113,22 +182,28 @@ export const ensureStripeFieldsOnce = async () => {
         `, [env.NC_SCHEMA, field]);
         
         if (fieldCheck.rows.length === 0) {
-          // Field doesn't exist, add it with proper type
           const fieldType = getFieldType(field);
+          console.log(`[internal-db] 📝 Creating field: ${field} (${fieldType})`);
+          
           await client.query(`
             ALTER TABLE "${env.NC_SCHEMA}"."userData" 
             ADD COLUMN "${field}" ${fieldType}
           `);
-          console.log(`[internal-db] ✅ Added field: ${field} (${fieldType})`);
+          
+          console.log(`[internal-db] ✅ Field created: ${field}`);
+          fieldsCreated++;
         } else {
           console.log(`[internal-db] ✅ Field already exists: ${field}`);
+          fieldsExisted++;
         }
       } catch (error) {
-        console.warn(`[internal-db] ⚠️ Could not add field ${field}:`, error instanceof Error ? error.message : String(error));
+        console.warn(`[internal-db] ⚠️ Could not process field ${field}:`, error instanceof Error ? error.message : String(error));
       }
     }
     
-    console.log('[internal-db] ✅ Stripe fields check complete');
+    console.log(`[internal-db] 📊 Stripe fields summary: ${fieldsCreated} created, ${fieldsExisted} already existed`);
+    console.log('[internal-db] ✅ Stripe fields check completed');
+    
   } catch (error) {
     console.error('[internal-db] ❌ Stripe fields check failed:', error instanceof Error ? error.message : String(error));
   } finally {
@@ -138,9 +213,12 @@ export const ensureStripeFieldsOnce = async () => {
   }
 };
 
-// Run field creation 2 minutes after deployment
+// Run field creation 2 minutes after deployment with singleton pattern
 // This ensures the app is fully running and database is accessible
-if (process.env.NODE_ENV !== 'test') {
+if (process.env.NODE_ENV !== 'test' && 
+    process.env.NEXT_PHASE !== 'phase-production-build' && 
+    !global.fieldCreationScheduled) {
+  global.fieldCreationScheduled = true;
   console.log('[internal-db] 🚀 Scheduling field creation for 2 minutes after deployment...');
   
   setTimeout(() => {
@@ -154,5 +232,7 @@ if (process.env.NODE_ENV !== 'test') {
     }).catch((error) => {
       console.error('[internal-db] ❌ Post-deployment field creation failed:', error instanceof Error ? error.message : String(error));
     });
-  }, 2 * 60 * 1000); // 2 minutes in milliseconds
+  }, 2 * 60 * 1000);
+} else if (process.env.NODE_ENV !== 'test') {
+  console.log('[internal-db] ⏭️ Field creation already scheduled, skipping...');
 } 

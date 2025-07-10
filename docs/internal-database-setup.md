@@ -60,19 +60,30 @@ CREATE TABLE IF NOT EXISTS "pjo77o6pg08pd9l"."userData" (
 3. **n8n Workflows**: Accesses the same tables by setting schema to `${NC_SCHEMA}`
 4. **Live Updates**: Server-Sent Events (SSE) for real-time UI updates
 5. **Webhook System**: n8n triggers UI updates via webhooks
+6. **Automatic Setup**: Database schema and tables are created automatically on first run
+
+### Automatic Database Setup
+
+The system uses a **2-minute delayed setup process** that runs after application startup:
+
+- **No manual intervention required** - just run `npm run dev`
+- **Self-contained setup** - creates schema, tables, and fields automatically
+- **Safe timing** - delay ensures database is accessed only when needed (user actions)
+- **One-time process** - subsequent startups detect existing setup and skip creation
 
 ## Database Setup
 
-Run the initialization script to create the schema and table:
+The database setup happens automatically when you start the application:
 
 ```bash
-npm run db:init-internal
+npm run dev
 ```
 
-This script will:
+The automatic setup process (runs 2 minutes after application start) will:
 - Create the NocoDB schema if it doesn't exist
-- Create the `userData` table within the schema
-- Verify the setup with a test query
+- Create the `userData` table within the schema with core fields
+- Add all application-specific fields (including Stripe fields)
+- No manual intervention required
 
 ## Integration Configuration
 

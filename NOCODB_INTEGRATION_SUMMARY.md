@@ -33,11 +33,6 @@ Successfully implemented a unified database architecture that enables the templa
 
 ### 3. Script Updates
 
-#### Database Initialization (`scripts/init-internal-db.js`)
-- Added `NC_SCHEMA` environment variable validation
-- Modified script to create schema before table creation
-- Updated table creation and test queries to use schema
-
 #### Field Addition (`scripts/add-field.js`)
 - Added `NC_SCHEMA` environment variable validation
 - Updated column existence check to include schema
@@ -179,7 +174,7 @@ All operations now use schema-prefixed table names:
 
 ### Verification Steps
 1. **Environment Setup**: Ensure `NC_SCHEMA` is set in all environments
-2. **Database Initialization**: Run `npm run db:init-internal`
+2. **Start Application**: Run `npm run dev` - database setup happens automatically after 2 minutes
 3. **Template Testing**: Visit `/n8n-demo` to test CRUD operations
 4. **NocoDB Verification**: Check table appears in NocoDB interface
 5. **n8n Integration**: Verify workflows can access the table
@@ -197,7 +192,7 @@ All operations now use schema-prefixed table names:
 ### Existing Installations
 For existing installations using the old approach:
 1. Set `NC_SCHEMA` environment variable
-2. Run database initialization script
+2. Start the application with `npm run dev` - automatic setup will occur after 2 minutes
 3. Migrate existing data if needed:
    ```sql
    INSERT INTO "pjo77o6pg08pd9l"."userData" 
