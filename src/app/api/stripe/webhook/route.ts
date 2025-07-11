@@ -103,6 +103,33 @@ export async function POST(request: NextRequest) {
         }
         break;
       
+      case 'customer.subscription.updated':
+        const updatedSubscription = event.data.object;
+        console.log(`[webhook] Subscription updated: ${updatedSubscription.id}, status: ${updatedSubscription.status}`);
+        
+        /**
+         * Subscription status and plan change sync
+         * 
+         * Implementation notes: Handles subscription status changes (active → canceled),
+         * plan upgrades/downgrades, and other subscription modifications from Customer Portal.
+         * Ensures local cache stays synchronized with Stripe's authoritative state.
+         */
+        await subscriptionService.syncSubscriptionFromWebhook(updatedSubscription);
+        break;
+      
+      case 'customer.subscription.deleted':
+        const deletedSubscription = event.data.object;
+        console.log(`[webhook] Subscription deleted: ${deletedSubscription.id}`);
+        
+        /**
+         * Subscription deletion sync
+         * 
+         * Implementation notes: Handles complete subscription removal from Stripe.
+         * Updates local cache to reflect the deleted subscription status.
+         */
+        await subscriptionService.syncSubscriptionFromWebhook(deletedSubscription);
+        break;
+      
       default:
         console.log(`[webhook] Ignoring event type: ${event.type}`);
         break;
