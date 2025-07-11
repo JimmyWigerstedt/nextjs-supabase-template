@@ -256,55 +256,26 @@ export class SubscriptionService {
   }
 
   /**
-   * Calculate credits from invoice metadata with subscription API fallback
+   * Calculate credits from invoice using subscription API as primary approach
    * 
    * Implementation notes: Multi-tier approach to get credits:
-   * 1. Extract credits from invoice parent.subscription_details.metadata (most reliable)
-   * 2. Extract credits from line item metadata (for direct invoice items)
-   * 3. Fallback to subscription API call (for complex scenarios)
+   * 1. Fetch current subscription from API (most reliable - always current)
+   * 2. Fallback to invoice parent.subscription_details.metadata (if API fails)
+   * 3. Fallback to line item metadata (if other methods fail)
    * Used by: Invoice payment processing for payment-first credit allocation
    */
   async calculateCreditsFromInvoice(invoice: Stripe.Invoice): Promise<number> {
     console.log(`[credits] Calculating credits from invoice ${invoice.id}`);
     
     try {
-      // FIRST: Try to get credits from invoice parent subscription_details metadata
-      const invoiceWithParent = invoice as Stripe.Invoice & {
-        parent?: { 
-          subscription_details?: { metadata?: { usage_credits?: string } };
-        };
-      };
-      
-      if (invoiceWithParent.parent?.subscription_details?.metadata?.usage_credits) {
-        const creditsStr = invoiceWithParent.parent.subscription_details.metadata.usage_credits;
-        const credits = parseInt(creditsStr, 10);
-        
-        if (!isNaN(credits) && credits > 0) {
-          console.log(`[credits] Found ${credits} credits in invoice parent.subscription_details.metadata`);
-          return credits;
-        }
-      }
-      
-      // SECOND: Try to get credits from line item metadata
-      for (const lineItem of invoice.lines.data) {
-        const creditsStr = lineItem.metadata?.usage_credits;
-        if (creditsStr) {
-          const credits = parseInt(creditsStr, 10);
-          if (!isNaN(credits) && credits > 0) {
-            console.log(`[credits] Found ${credits} credits in line item metadata`);
-            return credits;
-          }
-        }
-      }
-      
-      // THIRD: Fallback to subscription API call (existing behavior)
+      // FIRST: Get subscription ID and fetch current state (most reliable)
       const subscriptionId = (invoice as Stripe.Invoice & { subscription?: string }).subscription;
       if (!subscriptionId) {
-        console.log(`[credits] Invoice ${invoice.id} has no subscription ID and no credits in metadata`);
+        console.log(`[credits] Invoice ${invoice.id} has no subscription ID`);
         return 0;
       }
       
-      console.log(`[credits] Falling back to subscription API call for ${subscriptionId}`);
+      console.log(`[credits] Fetching current subscription state for ${subscriptionId}`);
       
       // Fetch current subscription with expanded price data
       const subscription = await stripe.subscriptions.retrieve(subscriptionId, {
@@ -335,15 +306,43 @@ export class SubscriptionService {
         console.log(`[credits] Price ${price.id}: ${itemCredits} credits (product: ${typeof price.product === 'string' ? price.product : price.product.id})`);
       }
       
-      console.log(`[credits] Total calculated credits from subscription ${subscriptionId}: ${totalCredits}`);
+      console.log(`[credits] Total credits from current subscription: ${totalCredits}`);
       return totalCredits;
       
     } catch (error) {
-      console.error(`[credits] Error calculating credits from invoice ${invoice.id}:`, error);
+      console.error(`[credits] Failed to fetch subscription, trying metadata fallbacks:`, error);
       
-      // Don't throw error - return 0 to prevent webhook failure
-      // This allows the webhook to continue processing other events
-      console.log(`[credits] Returning 0 credits due to error - webhook will continue`);
+      // FALLBACK: Try to get credits from invoice parent subscription_details metadata
+      const invoiceWithParent = invoice as Stripe.Invoice & {
+        parent?: { 
+          subscription_details?: { metadata?: { usage_credits?: string } };
+        };
+      };
+      
+      if (invoiceWithParent.parent?.subscription_details?.metadata?.usage_credits) {
+        const creditsStr = invoiceWithParent.parent.subscription_details.metadata.usage_credits;
+        const credits = parseInt(creditsStr, 10);
+        
+        if (!isNaN(credits) && credits > 0) {
+          console.log(`[credits] Found ${credits} credits in invoice parent.subscription_details.metadata (fallback)`);
+          return credits;
+        }
+      }
+      
+      // FALLBACK: Try to get credits from line item metadata
+      for (const lineItem of invoice.lines.data) {
+        const creditsStr = lineItem.metadata?.usage_credits;
+        if (creditsStr) {
+          const credits = parseInt(creditsStr, 10);
+          if (!isNaN(credits) && credits > 0) {
+            console.log(`[credits] Found ${credits} credits in line item metadata (fallback)`);
+            return credits;
+          }
+        }
+      }
+      
+      // If all methods fail, return 0 to prevent webhook failure
+      console.log(`[credits] All methods failed, returning 0 credits - webhook will continue`);
       return 0;
     }
   }
