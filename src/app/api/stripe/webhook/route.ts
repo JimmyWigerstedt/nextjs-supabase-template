@@ -61,15 +61,41 @@ export async function POST(request: NextRequest) {
           subscription?: string | Stripe.Subscription;
           subscription_details?: { metadata?: Record<string, string> };
           billing_reason?: string;
+          parent?: { 
+            subscription_details?: { metadata?: Record<string, string> };
+          };
         };
         console.log(`[webhook] Invoice debug:`, {
           invoiceId: invoice.id,
           subscriptionId: typeof invoiceDebug.subscription === 'string' ? invoiceDebug.subscription : invoiceDebug.subscription?.id,
           hasSubscriptionDetails: !!invoiceDebug.subscription_details,
           subscriptionDetailsMetadata: invoiceDebug.subscription_details?.metadata,
+          hasParent: !!invoiceDebug.parent,
+          parentSubscriptionDetails: invoiceDebug.parent?.subscription_details?.metadata,
           lineItemsCount: invoice.lines.data.length,
           billingReason: invoiceDebug.billing_reason,
         });
+        
+        // DEBUG: Log line item structure for debugging
+        if (invoice.lines.data.length > 0) {
+          console.log(`[webhook] Line items debug:`, invoice.lines.data.map(item => {
+            const lineItemWithParent = item as Stripe.InvoiceLineItem & {
+              parent?: {
+                type?: string;
+                subscription_details?: { metadata?: Record<string, string> };
+              };
+            };
+            
+            return {
+              id: item.id,
+              hasMetadata: !!item.metadata && Object.keys(item.metadata).length > 0,
+              metadata: item.metadata,
+              hasParent: !!lineItemWithParent.parent,
+              parentType: lineItemWithParent.parent?.type,
+              parentSubscriptionDetails: lineItemWithParent.parent?.subscription_details?.metadata,
+            };
+          }));
+        }
         
         // Extract user ID from invoice subscription metadata
         const userId = await subscriptionService.extractUserIdFromInvoice(invoice);
