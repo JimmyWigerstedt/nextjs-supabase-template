@@ -256,25 +256,55 @@ export class SubscriptionService {
   }
 
   /**
-   * Calculate credits from current subscription state (not invoice line items)
+   * Calculate credits from invoice metadata with subscription API fallback
    * 
-   * Implementation notes: Fetches current subscription state from Stripe to get credits
-   * from price-level metadata. This approach handles mid-cycle upgrades reliably since
-   * upgrade invoices contain proration line items without usage_credits metadata.
+   * Implementation notes: Multi-tier approach to get credits:
+   * 1. Extract credits from invoice parent.subscription_details.metadata (most reliable)
+   * 2. Extract credits from line item metadata (for direct invoice items)
+   * 3. Fallback to subscription API call (for complex scenarios)
    * Used by: Invoice payment processing for payment-first credit allocation
    */
   async calculateCreditsFromInvoice(invoice: Stripe.Invoice): Promise<number> {
     console.log(`[credits] Calculating credits from invoice ${invoice.id}`);
     
     try {
-      // Extract subscription ID from invoice
+      // FIRST: Try to get credits from invoice parent subscription_details metadata
+      const invoiceWithParent = invoice as Stripe.Invoice & {
+        parent?: { 
+          subscription_details?: { metadata?: { usage_credits?: string } };
+        };
+      };
+      
+      if (invoiceWithParent.parent?.subscription_details?.metadata?.usage_credits) {
+        const creditsStr = invoiceWithParent.parent.subscription_details.metadata.usage_credits;
+        const credits = parseInt(creditsStr, 10);
+        
+        if (!isNaN(credits) && credits > 0) {
+          console.log(`[credits] Found ${credits} credits in invoice parent.subscription_details.metadata`);
+          return credits;
+        }
+      }
+      
+      // SECOND: Try to get credits from line item metadata
+      for (const lineItem of invoice.lines.data) {
+        const creditsStr = lineItem.metadata?.usage_credits;
+        if (creditsStr) {
+          const credits = parseInt(creditsStr, 10);
+          if (!isNaN(credits) && credits > 0) {
+            console.log(`[credits] Found ${credits} credits in line item metadata`);
+            return credits;
+          }
+        }
+      }
+      
+      // THIRD: Fallback to subscription API call (existing behavior)
       const subscriptionId = (invoice as Stripe.Invoice & { subscription?: string }).subscription;
       if (!subscriptionId) {
-        console.log(`[credits] Invoice ${invoice.id} has no subscription ID`);
+        console.log(`[credits] Invoice ${invoice.id} has no subscription ID and no credits in metadata`);
         return 0;
       }
       
-      console.log(`[credits] Fetching subscription ${subscriptionId} to get current state`);
+      console.log(`[credits] Falling back to subscription API call for ${subscriptionId}`);
       
       // Fetch current subscription with expanded price data
       const subscription = await stripe.subscriptions.retrieve(subscriptionId, {
