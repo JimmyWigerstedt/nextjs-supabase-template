@@ -15,6 +15,7 @@ interface StripePrice {
   currency: string;
   interval: string | undefined;
   interval_count: number | undefined;
+  metadata: Record<string, string>; // Include price metadata for credit display
 }
 
 interface Subscription {
@@ -120,13 +121,12 @@ function PricingCard({ price }: PricingCardProps) {
   const productName = price.product?.name ?? 'Unknown Plan';
   const displayInterval = price.interval ?? 'month';
 
-  // Extract usage credits from product metadata
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
-  const creditsMetadata = price.product?.metadata?.usage_credits;
-  const baseCredits = parseInt(typeof creditsMetadata === 'string' ? creditsMetadata : '0', 10);
+  // Extract usage credits from price metadata (not product metadata)
+  const creditsMetadata = price.metadata?.usage_credits;
+  const credits = parseInt(typeof creditsMetadata === 'string' ? creditsMetadata : '0', 10);
   // Handle invalid string values that result in NaN
-  const validBaseCredits = isNaN(baseCredits) ? 0 : baseCredits;
-  const displayCredits = price.interval === 'year' ? validBaseCredits * 12 : validBaseCredits;
+  const validCredits = isNaN(credits) ? 0 : credits;
+  const displayCredits = validCredits; // No multiplication needed - credits are already configured per price
   const creditsText = displayCredits > 0 ? 
     `${displayCredits.toLocaleString()} credits/${displayInterval}` : 
     'No credits included';

@@ -69,7 +69,7 @@ export async function POST(request: NextRequest) {
           break;
         }
         
-        // Calculate credits from invoice line items
+        // Calculate credits from current subscription state
         const totalCredits = await subscriptionService.calculateCreditsFromInvoice(invoice);
         
         if (totalCredits > 0) {
@@ -77,13 +77,13 @@ export async function POST(request: NextRequest) {
           const billingReason = invoice.billing_reason ?? 'manual';
           await subscriptionService.handleCreditAllocation(billingReason, userId, totalCredits);
           
-          // Mark invoice as processed for idempotency
-          await subscriptionService.markInvoiceProcessed(invoice.id);
-          
           console.log(`[webhook] ✅ Allocated ${totalCredits} credits to user ${userId} for invoice ${invoice.id}`);
         } else {
-          console.log(`[webhook] No credits found in invoice ${invoice.id}`);
+          console.log(`[webhook] No credits found in invoice ${invoice.id} - processing without credit allocation`);
         }
+        
+        // Always mark invoice as processed for idempotency (even if no credits)
+        await subscriptionService.markInvoiceProcessed(invoice.id);
         break;
       
       case 'checkout.session.completed':

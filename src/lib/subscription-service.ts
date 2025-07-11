@@ -256,64 +256,66 @@ export class SubscriptionService {
   }
 
   /**
-   * Calculate credits from Stripe invoice line items
+   * Calculate credits from current subscription state (not invoice line items)
    * 
-   * Implementation notes: Extracts usage_credits from line item metadata,
-   * handles billing intervals (yearly = base × 12), and calculates prorated amounts.
+   * Implementation notes: Fetches current subscription state from Stripe to get credits
+   * from price-level metadata. This approach handles mid-cycle upgrades reliably since
+   * upgrade invoices contain proration line items without usage_credits metadata.
    * Used by: Invoice payment processing for payment-first credit allocation
    */
   async calculateCreditsFromInvoice(invoice: Stripe.Invoice): Promise<number> {
-    let totalCredits = 0;
-    
     console.log(`[credits] Calculating credits from invoice ${invoice.id}`);
     
-    for (const lineItem of invoice.lines.data) {
-      // Extract base credits from line item metadata
-      const baseCredits = parseInt(lineItem.metadata?.usage_credits ?? '0', 10);
-      if (isNaN(baseCredits) || baseCredits <= 0) {
-        console.log(`[credits] Line item ${lineItem.id} has no valid usage_credits metadata`);
-        continue;
+    try {
+      // Extract subscription ID from invoice
+      const subscriptionId = (invoice as Stripe.Invoice & { subscription?: string }).subscription;
+      if (!subscriptionId) {
+        console.log(`[credits] Invoice ${invoice.id} has no subscription ID`);
+        return 0;
       }
       
-      console.log(`[credits] Line item ${lineItem.id}: base credits = ${baseCredits}`);
+      console.log(`[credits] Fetching subscription ${subscriptionId} to get current state`);
       
-      // Get billing interval from price
-      let lineCredits = baseCredits;
-      try {
-        const priceId = lineItem.pricing?.price_details?.price;
-        if (!priceId) {
-          console.log(`[credits] Line item ${lineItem.id} has no price details, using base credits`);
-          totalCredits += lineCredits;
+      // Fetch current subscription with expanded price data
+      const subscription = await stripe.subscriptions.retrieve(subscriptionId, {
+        expand: ['items.data.price']
+      });
+      
+      console.log(`[credits] Subscription ${subscriptionId} has ${subscription.items.data.length} items`);
+      
+      // Sum credits from all subscription items
+      let totalCredits = 0;
+      
+      for (const item of subscription.items.data) {
+        const price = item.price;
+        const usageCreditsStr = price.metadata?.usage_credits;
+        
+        if (!usageCreditsStr) {
+          console.log(`[credits] Price ${price.id} has no usage_credits metadata, skipping`);
           continue;
         }
         
-        const price = await stripe.prices.retrieve(priceId);
-        
-        // Handle yearly subscriptions  
-        if (price.recurring?.interval === 'year') {
-          lineCredits = baseCredits * 12;
-          console.log(`[credits] Yearly subscription detected: ${baseCredits} × 12 = ${lineCredits}`);
+        const itemCredits = parseInt(usageCreditsStr, 10);
+        if (isNaN(itemCredits) || itemCredits <= 0) {
+          console.log(`[credits] Price ${price.id} has invalid usage_credits metadata: ${usageCreditsStr}`);
+          continue;
         }
         
-        // Handle proration
-        const isProration = lineItem.parent?.invoice_item_details?.proration ?? false;
-        if (isProration && price.unit_amount) {
-          const proratedRatio = lineItem.amount / price.unit_amount;
-          const proratedCredits = Math.floor(lineCredits * proratedRatio);
-          console.log(`[credits] Proration detected: ${lineCredits} × ${proratedRatio} = ${proratedCredits}`);
-          lineCredits = proratedCredits;
-        }
-      } catch (error) {
-        console.error(`[credits] Error fetching price for line item ${lineItem.id}:`, error);
-        // Continue with base credits if price fetch fails
+        totalCredits += itemCredits;
+        console.log(`[credits] Price ${price.id}: ${itemCredits} credits (product: ${typeof price.product === 'string' ? price.product : price.product.id})`);
       }
       
-      totalCredits += lineCredits;
-      console.log(`[credits] Line item ${lineItem.id}: final credits = ${lineCredits}`);
+      console.log(`[credits] Total calculated credits from subscription ${subscriptionId}: ${totalCredits}`);
+      return totalCredits;
+      
+    } catch (error) {
+      console.error(`[credits] Error calculating credits from invoice ${invoice.id}:`, error);
+      
+      // Don't throw error - return 0 to prevent webhook failure
+      // This allows the webhook to continue processing other events
+      console.log(`[credits] Returning 0 credits due to error - webhook will continue`);
+      return 0;
     }
-    
-    console.log(`[credits] Total calculated credits: ${totalCredits}`);
-    return totalCredits;
   }
 
   /**

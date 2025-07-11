@@ -20,21 +20,16 @@ export const paymentsRouter = createTRPCRouter({
       // Ensure we have a Stripe customer
       const customerId = await subscriptionService.ensureStripeCustomer(user.id, user.email!);
       
-      // Fetch price with expanded product to get usage credits
-      const price = await stripe.prices.retrieve(input.priceId, {
-        expand: ['product']
-      });
+      // Fetch price to get usage credits from price metadata
+      const price = await stripe.prices.retrieve(input.priceId);
       
-      // Extract usage credits from product metadata
-      const product = price.product;
+      // Extract usage credits from price metadata (not product metadata)
       let usageCredits = 0;
-      
-      if (typeof product !== 'string' && product && 'metadata' in product) {
-        const baseCredits = parseInt(product.metadata.usage_credits ?? '0', 10);
+      const creditsMetadata = price.metadata?.usage_credits;
+      if (creditsMetadata) {
+        const credits = parseInt(creditsMetadata, 10);
         // Handle invalid string values that result in NaN
-        const validBaseCredits = isNaN(baseCredits) ? 0 : baseCredits;
-        // Store only base credits - webhook handler will apply multiplication
-        usageCredits = validBaseCredits;
+        usageCredits = isNaN(credits) ? 0 : credits;
       }
       
       // Create checkout session with usage credits in metadata
@@ -113,10 +108,11 @@ export const paymentsRouter = createTRPCRouter({
     }),
 
   /**
-   * Retrieve active Stripe prices with product information
+   * Retrieve active Stripe prices with product information and price metadata
    * 
    * Implementation notes: Always fetches fresh pricing data from Stripe API
-   * with product expansion for complete pricing display
+   * with product expansion for complete pricing display. Now includes price metadata
+   * to support credit allocation display from price-level configuration.
    * Used by: Pricing page, subscription upgrade options
    */
   getStripePrices: authorizedProcedure
@@ -137,6 +133,7 @@ export const paymentsRouter = createTRPCRouter({
         currency: price.currency,
         interval: price.recurring?.interval,
         interval_count: price.recurring?.interval_count,
+        metadata: price.metadata, // Include price metadata for credit display
       }));
     }),
 }); 
