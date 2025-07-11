@@ -1,10 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Check, Crown } from 'lucide-react';
 import { BillingToggle, type BillingInterval } from '~/components/ui/billing-toggle';
 import { SubmitButton } from './submit-button';
 import { clientApi } from "~/trpc/react";
+import { toast } from 'sonner';
+import { useSearchParams } from 'next/navigation';
 
 // Type definitions for better TypeScript support
 interface StripePrice {
@@ -15,6 +17,7 @@ interface StripePrice {
   currency: string;
   interval: string | undefined;
   interval_count: number | undefined;
+  metadata: Record<string, string>; // Include price metadata for credit display
 }
 
 interface Subscription {
@@ -26,9 +29,17 @@ interface Subscription {
 
 export function PricingPageClient() {
   const [billingInterval, setBillingInterval] = useState<BillingInterval>('monthly');
+  const searchParams = useSearchParams();
   
   const { data: prices, isLoading } = clientApi.payments.getStripePrices.useQuery();
   const { data: currentSubscription } = clientApi.payments.getCurrentSubscription.useQuery();
+
+  // Show success message when redirected from successful checkout
+  useEffect(() => {
+    if (searchParams.get('checkout') === 'success') {
+      toast.success('🎉 Payment successful! Your subscription is now active.');
+    }
+  }, [searchParams]);
 
   if (isLoading) {
     return <PricingPageSkeleton />;
@@ -120,13 +131,12 @@ function PricingCard({ price }: PricingCardProps) {
   const productName = price.product?.name ?? 'Unknown Plan';
   const displayInterval = price.interval ?? 'month';
 
-  // Extract usage credits from product metadata
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
-  const creditsMetadata = price.product?.metadata?.usage_credits;
-  const baseCredits = parseInt(typeof creditsMetadata === 'string' ? creditsMetadata : '0', 10);
+  // Extract usage credits from price metadata (not product metadata)
+  const creditsMetadata = price.metadata?.usage_credits;
+  const credits = parseInt(typeof creditsMetadata === 'string' ? creditsMetadata : '0', 10);
   // Handle invalid string values that result in NaN
-  const validBaseCredits = isNaN(baseCredits) ? 0 : baseCredits;
-  const displayCredits = price.interval === 'year' ? validBaseCredits * 12 : validBaseCredits;
+  const validCredits = isNaN(credits) ? 0 : credits;
+  const displayCredits = validCredits; // No multiplication needed - credits are already configured per price
   const creditsText = displayCredits > 0 ? 
     `${displayCredits.toLocaleString()} credits/${displayInterval}` : 
     'No credits included';

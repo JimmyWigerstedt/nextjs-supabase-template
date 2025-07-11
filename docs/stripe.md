@@ -84,8 +84,17 @@ async getActiveSubscription(userId: string) {
 
 ### Webhook Event Handling
 - **New Event Types**: Add cases to webhook switch statement
-- **Event Processing**: Each event type updates local cache via `syncSubscriptionFromWebhook()`
+- **Event Processing**: Subscription events sync metadata only via `syncSubscriptionFromWebhook()`. Credit allocation is handled separately by `invoice.payment_succeeded` webhook using payment-first approach.
 - **Error Handling**: Webhook failures don't break the system due to API fallback capabilities
+
+### Credit Allocation Strategy
+- **Payment-First Approach**: Credits are allocated only when `invoice.payment_succeeded` webhook fires
+- **Subscription-State Fetching**: Credits calculated by fetching current subscription state and summing price-level metadata (not parsing invoice line items)
+- **Price-Level Metadata**: Credits configured per price in Stripe (`price.metadata.usage_credits`) for granular control
+- **Billing Reason Logic**: Uses `invoice.billing_reason` to determine ADD vs REPLACE credit behavior
+- **Idempotency**: Invoice processing is tracked to prevent duplicate credit allocation during retries
+- **Separation of Concerns**: Subscription metadata sync is separate from credit allocation for reliability
+- **Robust Edge Cases**: Handles upgrades, downgrades, multi-item subscriptions, and missing metadata gracefully
 
 ## Architecture Decisions
 

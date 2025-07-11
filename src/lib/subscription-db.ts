@@ -275,3 +275,96 @@ export async function checkSubscriptionFieldsExist(): Promise<{
     client.release();
   }
 } 
+
+/**
+ * Set/replace user credits (for renewals and initial signups)
+ * 
+ * Implementation notes: Uses database transaction with FOR UPDATE locking
+ * to prevent race conditions. Replaces existing credits with new value.
+ * Used by: Invoice payment processing for subscription_cycle and subscription_create
+ */
+export async function setUserCredits(userId: string, credits: number): Promise<void> {
+  const client = await internalDb.connect();
+  
+  try {
+    await client.query('BEGIN');
+    
+    // First, check if user record exists with FOR UPDATE lock
+    const existingUser = await client.query(
+      `SELECT "UID", "usage_credits" FROM "${env.NC_SCHEMA}"."userData" WHERE "UID" = $1 FOR UPDATE`,
+      [userId]
+    );
+
+    if (existingUser.rows.length === 0) {
+      // Create new user record with credits
+      await client.query(
+        `INSERT INTO "${env.NC_SCHEMA}"."userData" ("UID", "usage_credits") VALUES ($1, $2)`,
+        [userId, credits]
+      );
+    } else {
+      // Update existing user record with new credits
+      await client.query(
+        `UPDATE "${env.NC_SCHEMA}"."userData" SET "usage_credits" = $1 WHERE "UID" = $2`,
+        [credits, userId]
+      );
+    }
+    
+    await client.query('COMMIT');
+    console.log(`[credits] Set user ${userId} credits to ${credits}`);
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('Failed to set user credits:', error);
+    throw new Error('Failed to set user credits');
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * Add credits to existing user balance (for upgrades and add-ons)
+ * 
+ * Implementation notes: Uses database transaction with FOR UPDATE locking
+ * to prevent race conditions. Adds credits to existing balance.
+ * Used by: Invoice payment processing for subscription_update and manual billing
+ */
+export async function addUserCredits(userId: string, credits: number): Promise<void> {
+  const client = await internalDb.connect();
+  
+  try {
+    await client.query('BEGIN');
+    
+    // First, check if user record exists with FOR UPDATE lock
+    const existingUser = await client.query(
+      `SELECT "UID", "usage_credits" FROM "${env.NC_SCHEMA}"."userData" WHERE "UID" = $1 FOR UPDATE`,
+      [userId]
+    );
+
+    if (existingUser.rows.length === 0) {
+      // Create new user record with credits
+      await client.query(
+        `INSERT INTO "${env.NC_SCHEMA}"."userData" ("UID", "usage_credits") VALUES ($1, $2)`,
+        [userId, credits]
+      );
+    } else {
+      // Add credits to existing balance
+      const currentCreditsValue = (existingUser.rows[0] as { usage_credits?: string | number })?.usage_credits;
+      const currentCredits = typeof currentCreditsValue === 'string' ? parseInt(currentCreditsValue, 10) : (currentCreditsValue ?? 0);
+      const safeCurrentCredits = isNaN(currentCredits) ? 0 : currentCredits;
+      const newCredits = safeCurrentCredits + credits;
+      
+      await client.query(
+        `UPDATE "${env.NC_SCHEMA}"."userData" SET "usage_credits" = $1 WHERE "UID" = $2`,
+        [newCredits, userId]
+      );
+    }
+    
+    await client.query('COMMIT');
+    console.log(`[credits] Added ${credits} credits to user ${userId}`);
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('Failed to add user credits:', error);
+    throw new Error('Failed to add user credits');
+  } finally {
+    client.release();
+  }
+} 

@@ -14,6 +14,33 @@ import { stripe } from "./payments/stripe";
 
 export class SubscriptionService {
   /**
+   * In-memory cache to track processed invoice IDs for idempotency
+   * 
+   * Implementation notes: Simple Set-based cache to prevent duplicate processing
+   * during webhook retries. In production, consider using Redis or database.
+   */
+  private processedInvoices = new Set<string>();
+
+  /**
+   * Check if invoice has already been processed
+   * 
+   * Implementation notes: Used to prevent duplicate credit allocation during webhook retries
+   */
+  async isInvoiceProcessed(invoiceId: string): Promise<boolean> {
+    return this.processedInvoices.has(invoiceId);
+  }
+
+  /**
+   * Mark invoice as processed for idempotency
+   * 
+   * Implementation notes: Adds invoice ID to processed set to prevent duplicate processing
+   */
+  async markInvoiceProcessed(invoiceId: string): Promise<void> {
+    this.processedInvoices.add(invoiceId);
+    console.log(`[credits] Marked invoice ${invoiceId} as processed`);
+  }
+
+  /**
    * Define subscription statuses that should be considered "active" for UI purposes
    * 
    * Implementation notes: These statuses should show a subscription banner in the UI
@@ -173,7 +200,8 @@ export class SubscriptionService {
    * Synchronize local subscription cache from Stripe webhook events
    * 
    * Implementation notes: Resolves plan name via product API calls and updates
-   * comprehensive local metadata (customer_id, subscription_id, plan, status, usage_credits)
+   * subscription metadata (customer_id, subscription_id, plan, status) WITHOUT
+   * credit allocation. Credits are now handled by invoice.payment_succeeded webhook.
    * Used by: Webhook event handlers for real-time sync
    */
   async syncSubscriptionFromWebhook(subscription: Stripe.Subscription): Promise<void> {
@@ -186,30 +214,14 @@ export class SubscriptionService {
     // Use the correct method for Stripe Subscription objects
     const planName = await getPlanNameFromStripeSubscription(subscription);
     
-    // Extract base usage credits from subscription metadata
-    const creditsFromMetadata = subscription.metadata.usage_credits ? 
-      parseInt(subscription.metadata.usage_credits, 10) : 0;
-    // Handle invalid string values that result in NaN
-    const baseCredits = isNaN(creditsFromMetadata) ? 0 : creditsFromMetadata;
-    
-    // Calculate final credits based on billing interval (same logic as checkout)
-    let usageCredits = baseCredits;
-    if (subscription.items.data.length > 0) {
-      const price = subscription.items.data[0]?.price;
-      if (price?.recurring?.interval === 'year') {
-        usageCredits = baseCredits * 12;
-        console.log(`[webhook] Yearly subscription detected. Base credits: ${baseCredits}, Final credits: ${usageCredits}`);
-      } else {
-        console.log(`[webhook] Monthly subscription detected. Credits: ${usageCredits}`);
-      }
-    }
+    console.log(`[webhook] Syncing subscription ${subscription.id} for user ${userId} (plan: ${planName})`);
 
     await updateMinimalSubscriptionData(userId, {
       stripe_customer_id: subscription.customer as string,
       stripe_subscription_id: subscription.id,
       subscription_plan: planName,
       subscription_status: subscription.status,
-      usage_credits: usageCredits,
+      // NOTE: usage_credits are NOT updated here - handled by invoice.payment_succeeded
     });
   }
 
@@ -241,6 +253,229 @@ export class SubscriptionService {
           : item.price.product.id,
       })),
     };
+  }
+
+  /**
+   * Calculate credits from invoice using subscription API as primary approach
+   * 
+   * Implementation notes: Multi-tier approach to get credits:
+   * 1. Fetch current subscription from API (most reliable - always current)
+   * 2. Fallback to invoice parent.subscription_details.metadata (if API fails)
+   * 3. Fallback to line item metadata (if other methods fail)
+   * Used by: Invoice payment processing for payment-first credit allocation
+   */
+  async calculateCreditsFromInvoice(invoice: Stripe.Invoice): Promise<number> {
+    console.log(`[credits] Calculating credits from invoice ${invoice.id}`);
+    
+    try {
+      // FIRST: Get subscription ID and fetch current state (most reliable)
+      const invoiceWithParent = invoice as Stripe.Invoice & {
+        parent?: { 
+          subscription_details?: { subscription?: string };
+        };
+      };
+      
+      const subscriptionId = invoiceWithParent.parent?.subscription_details?.subscription;
+      if (!subscriptionId) {
+        console.log(`[credits] Invoice ${invoice.id} has no subscription ID in parent.subscription_details`);
+        return 0;
+      }
+      
+      console.log(`[credits] Fetching current subscription state for ${subscriptionId}`);
+      
+      // Fetch current subscription with expanded price data
+      const subscription = await stripe.subscriptions.retrieve(subscriptionId, {
+        expand: ['items.data.price']
+      });
+      
+      console.log(`[credits] Subscription ${subscriptionId} has ${subscription.items.data.length} items`);
+      
+      // DEBUG: Log the full subscription structure
+      console.log(`[credits] DEBUG: Subscription items:`, JSON.stringify(subscription.items.data, null, 2));
+      
+      // Sum credits from all subscription items
+      let totalCredits = 0;
+      
+      for (const item of subscription.items.data) {
+        const price = item.price;
+        console.log(`[credits] DEBUG: Processing item with price ID ${price.id}, metadata:`, price.metadata);
+        const usageCreditsStr = price.metadata?.usage_credits;
+        
+        if (!usageCreditsStr) {
+          console.log(`[credits] Price ${price.id} has no usage_credits metadata, skipping`);
+          continue;
+        }
+        
+        const itemCredits = parseInt(usageCreditsStr, 10);
+        if (isNaN(itemCredits) || itemCredits <= 0) {
+          console.log(`[credits] Price ${price.id} has invalid usage_credits metadata: ${usageCreditsStr}`);
+          continue;
+        }
+        
+        totalCredits += itemCredits;
+        console.log(`[credits] Price ${price.id}: ${itemCredits} credits (product: ${typeof price.product === 'string' ? price.product : price.product.id})`);
+      }
+      
+      console.log(`[credits] Total credits from current subscription: ${totalCredits}`);
+      return totalCredits;
+      
+    } catch (error) {
+      console.error(`[credits] Failed to fetch subscription, trying metadata fallbacks:`, error);
+      
+      // FALLBACK: Try to get credits from invoice parent subscription_details metadata
+      // (reuse the same invoiceWithParent type declaration from above)
+      const invoiceWithParent = invoice as Stripe.Invoice & {
+        parent?: { 
+          subscription_details?: { metadata?: { usage_credits?: string }; subscription?: string };
+        };
+      };
+      
+      if (invoiceWithParent.parent?.subscription_details?.metadata?.usage_credits) {
+        const creditsStr = invoiceWithParent.parent.subscription_details.metadata.usage_credits;
+        const credits = parseInt(creditsStr, 10);
+        
+        if (!isNaN(credits) && credits > 0) {
+          console.log(`[credits] Found ${credits} credits in invoice parent.subscription_details.metadata (fallback)`);
+          return credits;
+        }
+      }
+      
+      // FALLBACK: Try to get credits from line item metadata
+      for (const lineItem of invoice.lines.data) {
+        const creditsStr = lineItem.metadata?.usage_credits;
+        if (creditsStr) {
+          const credits = parseInt(creditsStr, 10);
+          if (!isNaN(credits) && credits > 0) {
+            console.log(`[credits] Found ${credits} credits in line item metadata (fallback)`);
+            return credits;
+          }
+        }
+      }
+      
+      // If all methods fail, return 0 to prevent webhook failure
+      console.log(`[credits] All methods failed, returning 0 credits - webhook will continue`);
+      return 0;
+    }
+  }
+
+  /**
+   * Handle credit allocation based on invoice billing reason
+   * 
+   * Implementation notes: Uses billing_reason to determine whether to ADD or REPLACE credits.
+   * Implements payment-first credit allocation strategy.
+   * Used by: Invoice payment webhook processing
+   */
+  async handleCreditAllocation(billingReason: string, userId: string, credits: number): Promise<void> {
+    const { setUserCredits, addUserCredits } = await import('./subscription-db');
+    
+    console.log(`[credits] Handling credit allocation: ${billingReason}, user: ${userId}, credits: ${credits}`);
+    
+    switch (billingReason) {
+      case 'subscription_cycle':
+        // Regular renewal - REPLACE credits (fresh billing period)
+        await setUserCredits(userId, credits);
+        console.log(`[credits] Renewal: Set user ${userId} credits to ${credits}`);
+        break;
+        
+      case 'subscription_update':
+        // Plan change - ADD credits (prorated amount)
+        await addUserCredits(userId, credits);
+        console.log(`[credits] Plan change: Added ${credits} credits to user ${userId}`);
+        break;
+        
+      case 'subscription_create':
+        // Initial signup - SET credits
+        await setUserCredits(userId, credits);
+        console.log(`[credits] Initial signup: Set user ${userId} credits to ${credits}`);
+        break;
+        
+      case 'manual':
+        // Add-on purchase - ADD credits
+        await addUserCredits(userId, credits);
+        console.log(`[credits] Add-on purchase: Added ${credits} credits to user ${userId}`);
+        break;
+        
+      default:
+        console.log(`[credits] Unknown billing reason: ${billingReason}, defaulting to ADD credits`);
+        await addUserCredits(userId, credits);
+        break;
+    }
+  }
+
+  /**
+   * Extract user ID from invoice using correct Stripe invoice structure
+   * 
+   * Implementation notes: Uses correct Stripe invoice structure to find user_id:
+   * 1. Check invoice.parent.subscription_details.metadata (most reliable for subscription invoices)
+   * 2. Check line item parent.subscription_details.metadata for subscription line items
+   * 3. Fallback to API call to subscription metadata (last resort)
+   * Used by: Invoice payment processing to identify the user
+   */
+  async extractUserIdFromInvoice(invoice: Stripe.Invoice): Promise<string | null> {
+    try {
+      // FIRST: Check invoice parent subscription_details metadata (most reliable for subscription invoices)
+      const invoiceWithParent = invoice as Stripe.Invoice & {
+        parent?: { 
+          subscription_details?: { metadata?: { user_id?: string } };
+        };
+      };
+      
+      if (invoiceWithParent.parent?.subscription_details?.metadata?.user_id) {
+        console.log(`[credits] Found user_id in invoice.parent.subscription_details.metadata: ${invoiceWithParent.parent.subscription_details.metadata.user_id}`);
+        return invoiceWithParent.parent.subscription_details.metadata.user_id;
+      }
+
+      // SECOND: Check line item parent subscription_details metadata
+      for (const lineItem of invoice.lines.data) {
+        const lineItemWithParent = lineItem as Stripe.InvoiceLineItem & {
+          parent?: {
+            subscription_details?: { metadata?: { user_id?: string } };
+          };
+        };
+        
+        if (lineItemWithParent.parent?.subscription_details?.metadata?.user_id) {
+          console.log(`[credits] Found user_id in line item parent.subscription_details.metadata: ${lineItemWithParent.parent.subscription_details.metadata.user_id}`);
+          return lineItemWithParent.parent.subscription_details.metadata.user_id;
+        }
+      }
+
+      // THIRD: Check direct line item metadata (for subscription line items)
+      for (const lineItem of invoice.lines.data) {
+        if (lineItem.metadata?.user_id) {
+          console.log(`[credits] Found user_id in line item metadata: ${lineItem.metadata.user_id}`);
+          return lineItem.metadata.user_id;
+        }
+      }
+      
+      // FOURTH: Fallback to API call (existing behavior)
+      console.log(`[credits] No user_id found in invoice payload, falling back to API call`);
+      const invoiceWithSubscription = invoice as Stripe.Invoice & {
+        subscription?: string | Stripe.Subscription;
+      };
+      
+      const subscriptionId = typeof invoiceWithSubscription.subscription === 'string' 
+        ? invoiceWithSubscription.subscription 
+        : invoiceWithSubscription.subscription?.id;
+        
+      if (!subscriptionId) {
+        console.log(`[credits] Invoice ${invoice.id} has no subscription`);
+        return null;
+      }
+      
+      const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+      const userId = subscription.metadata.user_id;
+      
+      if (!userId) {
+        console.error(`[credits] No user_id found in subscription ${subscription.id} metadata`);
+        return null;
+      }
+      
+      console.log(`[credits] Found user_id via API call: ${userId}`);
+      return userId;
+    } catch (error) {
+      console.error(`[credits] Error extracting user ID from invoice ${invoice.id}:`, error);
+      return null;
+    }
   }
 }
 
