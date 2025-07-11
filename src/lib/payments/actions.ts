@@ -42,7 +42,7 @@ export const paymentsRouter = createTRPCRouter({
           },
         ],
         mode: 'subscription',
-        success_url: `${env.BASE_URL}/dashboard?checkout=success`,
+        success_url: `${env.BASE_URL}/pricing?checkout=success`,
         cancel_url: `${env.BASE_URL}/pricing`,
         customer: customerId,
         client_reference_id: user.id,

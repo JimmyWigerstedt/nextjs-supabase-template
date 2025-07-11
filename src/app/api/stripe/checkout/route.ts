@@ -44,8 +44,8 @@ export async function GET(request: NextRequest) {
 
     console.log(`[checkout] ✅ Successfully synced subscription data for user ${userId}`);
 
-    // Redirect to dashboard with success message
-    return NextResponse.redirect(new URL('/dashboard?checkout=success', env.BASE_URL));
+    // Redirect to pricing page with success message
+    return NextResponse.redirect(new URL('/pricing?checkout=success', env.BASE_URL));
   } catch (error) {
     console.error('Error handling successful checkout:', error);
     return NextResponse.redirect(new URL('/pricing?error=checkout-failed', env.BASE_URL));

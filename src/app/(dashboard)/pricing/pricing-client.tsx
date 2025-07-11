@@ -1,10 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Check, Crown } from 'lucide-react';
 import { BillingToggle, type BillingInterval } from '~/components/ui/billing-toggle';
 import { SubmitButton } from './submit-button';
 import { clientApi } from "~/trpc/react";
+import { toast } from 'sonner';
+import { useSearchParams } from 'next/navigation';
 
 // Type definitions for better TypeScript support
 interface StripePrice {
@@ -27,9 +29,17 @@ interface Subscription {
 
 export function PricingPageClient() {
   const [billingInterval, setBillingInterval] = useState<BillingInterval>('monthly');
+  const searchParams = useSearchParams();
   
   const { data: prices, isLoading } = clientApi.payments.getStripePrices.useQuery();
   const { data: currentSubscription } = clientApi.payments.getCurrentSubscription.useQuery();
+
+  // Show success message when redirected from successful checkout
+  useEffect(() => {
+    if (searchParams.get('checkout') === 'success') {
+      toast.success('🎉 Payment successful! Your subscription is now active.');
+    }
+  }, [searchParams]);
 
   if (isLoading) {
     return <PricingPageSkeleton />;
