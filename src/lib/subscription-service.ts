@@ -269,9 +269,15 @@ export class SubscriptionService {
     
     try {
       // FIRST: Get subscription ID and fetch current state (most reliable)
-      const subscriptionId = (invoice as Stripe.Invoice & { subscription?: string }).subscription;
+      const invoiceWithParent = invoice as Stripe.Invoice & {
+        parent?: { 
+          subscription_details?: { subscription?: string };
+        };
+      };
+      
+      const subscriptionId = invoiceWithParent.parent?.subscription_details?.subscription;
       if (!subscriptionId) {
-        console.log(`[credits] Invoice ${invoice.id} has no subscription ID`);
+        console.log(`[credits] Invoice ${invoice.id} has no subscription ID in parent.subscription_details`);
         return 0;
       }
       
@@ -284,11 +290,15 @@ export class SubscriptionService {
       
       console.log(`[credits] Subscription ${subscriptionId} has ${subscription.items.data.length} items`);
       
+      // DEBUG: Log the full subscription structure
+      console.log(`[credits] DEBUG: Subscription items:`, JSON.stringify(subscription.items.data, null, 2));
+      
       // Sum credits from all subscription items
       let totalCredits = 0;
       
       for (const item of subscription.items.data) {
         const price = item.price;
+        console.log(`[credits] DEBUG: Processing item with price ID ${price.id}, metadata:`, price.metadata);
         const usageCreditsStr = price.metadata?.usage_credits;
         
         if (!usageCreditsStr) {
@@ -313,9 +323,10 @@ export class SubscriptionService {
       console.error(`[credits] Failed to fetch subscription, trying metadata fallbacks:`, error);
       
       // FALLBACK: Try to get credits from invoice parent subscription_details metadata
+      // (reuse the same invoiceWithParent type declaration from above)
       const invoiceWithParent = invoice as Stripe.Invoice & {
         parent?: { 
-          subscription_details?: { metadata?: { usage_credits?: string } };
+          subscription_details?: { metadata?: { usage_credits?: string }; subscription?: string };
         };
       };
       
