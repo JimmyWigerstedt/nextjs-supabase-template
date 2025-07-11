@@ -1,49 +1,59 @@
-# Quick Reference for AI Assistants
+# Quick Reference Guide
 
-## New Page Checklist
+## 🚀 **Template Adaptation Checklist**
 
-### 1. Database Setup
+### 1. **Copy Template Component**
 ```bash
-# Add your fields
-npm run add-field customerName
-npm run add-field orderStatus
-npm run add-field orderTotal
+# Copy from existing template
+cp src/app/n8n-demo/client-page.tsx src/app/your-page/client-page.tsx
+cp src/app/n8n-demo/page.tsx src/app/your-page/page.tsx
 ```
 
-### 2. Component Creation
-```bash
-# Create page directory
-mkdir src/app/your-new-page
-
-# Copy from template (use n8n-demo as reference)
-cp src/app/n8n-demo/client-page.tsx src/app/your-new-page/client-page.tsx
-cp src/app/n8n-demo/page.tsx src/app/your-new-page/page.tsx
-```
-
-### 3. Customize Component
+### 2. **Configure Field Arrays**
 ```typescript
-// In client-page.tsx - ONLY change these:
-
-// 1. Component name
-export function YourNewPageClient() {
-
-// 2. Field list  
-const DEVELOPMENT_FIELDS = [
-  'customerName',
-  'orderStatus', 
-  'orderTotal'
+// INPUT_FIELDS: Form data sent to N8N (no database columns needed)
+const INPUT_FIELDS = [
+  'customerEmail',    // Form input → N8N payload → cleared
+  'productSku',       // Form input → N8N payload → cleared  
+  'orderQuantity'     // Form input → N8N payload → cleared
 ];
 
-// 3. Page title
+// PERSISTENT_FIELDS: Database columns for storage and real-time updates
+const PERSISTENT_FIELDS = [
+  'orderStatus',      // Database column → display/edit → real-time updates
+  'trackingNumber',   // Database column → display/edit → real-time updates
+  'customerNotes'     // Database column → display/edit → real-time updates
+];
+```
+
+### 3. **Add Database Columns**
+```bash
+# Add PERSISTENT_FIELDS to database (INPUT_FIELDS don't need columns)
+npm run add-field orderStatus
+npm run add-field trackingNumber
+npm run add-field customerNotes
+```
+
+### 4. **Update Component Details**
+```typescript
+// Component name
+export function YourPageClient() {
+
+// Page title
 <CardTitle>Your Page Title</CardTitle>
 
-// 4. Optional: Custom formatting functions
+// Field labels (optional)
 const formatFieldName = (fieldName: string) => {
-  // Your custom logic
+  // Your custom display names
+  const labels = {
+    'customerEmail': 'Customer Email',
+    'productSku': 'Product SKU'
+  };
+  return labels[fieldName] || fieldName;
 };
 ```
 
-### 4. n8n Workflow Setup
+### 5. **N8N Workflow Setup**
 
 Your workflow receives:
 ```json
@@ -51,8 +61,9 @@ Your workflow receives:
   "user_id": "uuid",
   "user_email": "email@example.com",
   "data": {
-    "customerName": "value",
-    "orderStatus": "value"
+    "customerEmail": "value",
+    "productSku": "value",
+    "orderQuantity": "value"
   },
   "action": "process"
 }
@@ -62,11 +73,11 @@ Your workflow should send back:
 ```json
 {
   "user_id": "uuid", 
-  "updatedFields": ["customerName", "orderStatus"]
+  "updatedFields": ["orderStatus", "trackingNumber"]
 }
 ```
 
-## File Structure
+## 🏗️ **File Structure**
 
 ```
 src/app/your-new-page/
@@ -74,401 +85,198 @@ src/app/your-new-page/
 └── client-page.tsx    # Main component (customize this)
 ```
 
-## What to Copy vs Customize
+## 🎯 **What to Copy vs Customize**
 
-### Copy Exactly (Never Modify)
+### **Copy Exactly (Never Modify)**
 - All import statements
 - All state declarations  
 - All tRPC mutation setup
 - SSE connection logic
-- Helper functions (updateFieldInput, getFieldHighlight, etc.)
-- Button click handlers (handleUpdateData, handleSendToN8n)
+- Helper functions (`updateInputField`, `updateEditableField`, `getFieldHighlight`)
+- Button click handlers (`handleSendToN8n`, `handleSaveField`)
 
-### Customize These
-- `DEVELOPMENT_FIELDS` array
+### **Customize These**
+- `INPUT_FIELDS` array
+- `PERSISTENT_FIELDS` array
 - Component name
 - Page title and descriptions
 - Field formatting functions
 - UI layout and styling
 - Card organization
 
-## Common Patterns
-
-### Field Validation
-```typescript
-const validateField = (fieldName: string, value: string): string | null => {
-  switch (fieldName) {
-    case 'email':
-      return /\S+@\S+\.\S+/.test(value) ? null : 'Invalid email';
-    case 'amount':
-      return !isNaN(Number(value)) ? null : 'Must be a number';
-    default:
-      return null;
-  }
-};
-```
-
-### Field Grouping
-```typescript
-const fieldGroups = {
-  personal: ['firstName', 'lastName', 'email'],
-  order: ['orderDate', 'orderTotal', 'orderStatus']
-};
-```
-
-### Conditional Display
-```typescript
-const shouldShowField = (fieldName: string): boolean => {
-  if (fieldName === 'billingAddress' && fieldInputs['sameAsShipping'] === 'true') {
-    return false;
-  }
-  return true;
-};
-```
-
-## Debugging
-
-### Check SSE Connection
-Look for browser console messages:
-- "SSE connection opened" = ✅ Connected
-- "SSE error" = ❌ Connection failed
-
-### Test Webhook Flow
-1. Send data to n8n
-2. Check n8n workflow logs
-3. Verify webhook is sent to `/api/webhooks/internal-updated`
-4. Look for green field highlighting in UI
-
-### Database Issues
-```bash
-# Check database structure
-npm run db:studio
-
-# Test connection
-# Use the "Test DB Connection" button in your page
-```
-
-## Field Naming Rules
-
-✅ **Valid field names:**
-- `customerName`
-- `order_status`
-- `shipment123`
-
-❌ **Invalid field names:**
-- `customer-name` (hyphens)
-- `order status` (spaces)
-- `123order` (starts with number)
-
-## Environment Variables Required
+## 🔧 **Environment Variables**
 
 ```bash
-# Internal database for dynamic fields
-INTERNAL_DATABASE_URL="postgresql://..."
+# Database connections
+DATABASE_URL="your-supabase-database-url"
+INTERNAL_DATABASE_URL="your-railway-postgresql-url"
 
-# n8n integration
+# N8N Integration
 N8N_BASE_URL="https://your-n8n-instance.com"
-N8N_WEBHOOK_SECRET="your-webhook-secret"
+N8N_WEBHOOK_SECRET="your-secure-webhook-secret-min-32-chars"
+N8N_TIMEOUT=30000
+
+# Schema Configuration
+NC_SCHEMA="pjo77o6pg08pd9l"
 ```
 
-## Copy-Paste Templates
+## 🔄 **Common Patterns**
 
-### Minimal Page Component
+### **Field Validation**
 ```typescript
-"use client";
-import { useState, useEffect, useRef } from "react";
-import { clientApi } from "~/trpc/react";
-import { Button } from "~/components/ui/button";
-import { Input } from "~/components/ui/input";
-import { Label } from "~/components/ui/label";
-import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
-import { toast } from "sonner";
-
-const DEVELOPMENT_FIELDS = [
-  'field1',
-  'field2',
-  // Add your fields here
-];
-
-export function YourPageClient() {
-  const utils = clientApi.useUtils();
-  const [fieldInputs, setFieldInputs] = useState<Record<string, string>>(
-    DEVELOPMENT_FIELDS.reduce((acc, field) => {
-      acc[field] = "";
-      return acc;
-    }, {} as Record<string, string>)
-  );
-  const [isConnected, setIsConnected] = useState(false);
-  const [lastUpdate, setLastUpdate] = useState<string | null>(null);
-  const [highlightedFields] = useState<Set<string>>(new Set());
-  const eventSourceRef = useRef<EventSource | null>(null);
-
-  const updateFieldInput = (fieldName: string, value: string) => {
-    setFieldInputs(prev => ({ ...prev, [fieldName]: value }));
-  };
-
-  const getFieldHighlight = (fieldName: string) => {
-    return highlightedFields.has(fieldName) 
-      ? "bg-green-100 border-green-300 transition-colors duration-300" 
-      : "";
-  };
-
-  // tRPC queries and mutations
-  const {
-    data: userData,
-    refetch: refetchUserData,
-    isLoading: isLoadingData,
-  } = clientApi.internal.getUserData.useQuery();
-
-  const { mutate: updateUserData, isPending: isUpdating } = 
-    clientApi.internal.updateUserData.useMutation({
-      onSuccess: () => {
-        toast.success("Data updated successfully!");
-        void refetchUserData();
-        setFieldInputs(prev => 
-          Object.keys(prev).reduce((acc, key) => {
-            acc[key] = "";
-            return acc;
-          }, {} as Record<string, string>)
-        );
-      },
-      onError: (error) => {
-        toast.error(`Error: ${error.message}`);
-      },
-    });
-
-  const { mutate: sendToN8n, isPending: isSendingToN8n } = 
-    clientApi.internal.sendToN8n.useMutation({
-      onSuccess: () => {
-        toast.success("Payload sent to n8n successfully!");
-        setFieldInputs(prev => 
-          Object.keys(prev).reduce((acc, key) => {
-            acc[key] = "";
-            return acc;
-          }, {} as Record<string, string>)
-        );
-      },
-      onError: (error) => {
-        toast.error(`n8n send failed: ${error.message}`);
-      },
-    });
-
-  // SSE connection for real-time updates
-  useEffect(() => {
-    const eventSource = new EventSource("/api/stream/user-updates");
-    eventSourceRef.current = eventSource;
-
-    eventSource.onopen = () => {
-      setIsConnected(true);
-    };
-
-    eventSource.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data) as {
-          type: string;
-          updatedFields?: string[];
-          timestamp?: string;
-        };
-
-        if (data.type === "userData-updated") {
-          setLastUpdate(data.timestamp ?? new Date().toISOString());
-          void utils.internal.getUserData.invalidate();
-        }
-      } catch (error) {
-        console.error("Failed to parse SSE message:", error);
-      }
-    };
-
-    eventSource.onerror = () => {
-      setIsConnected(false);
-      eventSource.close();
-    };
-
-    return () => {
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close();
-      }
-    };
-  }, []); // Empty dependency array - SSE connection should only be created once
-
-  const handleUpdateData = () => {
-    const updates: Record<string, string> = {};
-    
-    Object.entries(fieldInputs).forEach(([fieldName, value]) => {
-      if (value.trim()) {
-        updates[fieldName] = value.trim();
-      }
-    });
-
-    if (Object.keys(updates).length === 0) {
-      toast.error("Please enter at least one field to update");
-      return;
-    }
-
-    updateUserData(updates);
-  };
-
-  const handleSendToN8n = () => {
-    const dataToSend: Record<string, string> = {};
-    
-    Object.entries(fieldInputs).forEach(([fieldName, value]) => {
-      if (value.trim()) {
-        dataToSend[fieldName] = value.trim();
-      }
-    });
-
-    if (Object.keys(dataToSend).length === 0) {
-      toast.error("Please enter some data to send to n8n");
-      return;
-    }
-
-    sendToN8n(dataToSend);
-  };
-
-  return (
-    <div className="flex min-h-screen flex-col items-center justify-center p-4">
-      <div className="w-full max-w-4xl space-y-6">
-        
-        {/* Header */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center justify-between">
-              Your Page Title
-              <div className="flex items-center space-x-2">
-                <div className={`w-3 h-3 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`} />
-                <span className="text-sm text-muted-foreground">
-                  {isConnected ? 'Live Updates Connected' : 'Disconnected'}
-                </span>
-              </div>
-            </CardTitle>
-          </CardHeader>
-        </Card>
-
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          
-          {/* Data Input Section */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Data Input Section</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {Object.keys(fieldInputs).map((fieldName) => (
-                <div key={fieldName} className="space-y-2">
-                  <Label htmlFor={`${fieldName}-input`}>
-                    {fieldName.charAt(0).toUpperCase() + fieldName.slice(1).replace(/([A-Z])/g, ' $1')}
-                  </Label>
-                  <Input
-                    id={`${fieldName}-input`}
-                    value={fieldInputs[fieldName] ?? ""}
-                    onChange={(e) => updateFieldInput(fieldName, e.target.value)}
-                    placeholder={`Enter ${fieldName} value`}
-                    disabled={isUpdating}
-                  />
-                </div>
-              ))}
-              
-              <Button 
-                onClick={handleUpdateData} 
-                disabled={isUpdating}
-                className="w-full"
-              >
-                {isUpdating ? "Updating..." : "Save Data to Database"}
-              </Button>
-            </CardContent>
-          </Card>
-
-          {/* Data Display Section */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Current Database Values</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {isLoadingData ? (
-                <p className="text-muted-foreground">Loading data...</p>
-              ) : (
-                <>
-                  {userData && Object.entries(userData as Record<string, unknown>)
-                    .filter(([key]) => !['UID', 'created_at', 'updated_at'].includes(key))
-                    .map(([fieldName, value]) => (
-                      <div key={fieldName} className="space-y-2">
-                        <Label>
-                          {fieldName.charAt(0).toUpperCase() + fieldName.slice(1).replace(/([A-Z])/g, ' $1')} (Current Value)
-                        </Label>
-                        <div className={`p-3 border rounded-md bg-muted ${getFieldHighlight(fieldName)}`}>
-                          {String(value) || "(empty)"}
-                        </div>
-                      </div>
-                    ))
-                  }
-                  
-                  {lastUpdate && (
-                    <div className="text-sm text-muted-foreground">
-                      Last updated via webhook: {new Date(lastUpdate).toLocaleString()}
-                    </div>
-                  )}
-                </>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* n8n Testing Section */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Send to n8n Section</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              This section sends data to n8n for processing. After n8n completes its workflow,
-              it will send a webhook back to update the UI with the processed results.
-            </p>
-            
-            <Button 
-              onClick={handleSendToN8n}
-              className="w-full"
-              disabled={isSendingToN8n || isUpdating}
-            >
-              {isSendingToN8n ? "Sending to n8n..." : "Send Data to n8n"}
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-    </div>
-  );
-}
+// Input validation patterns
+const validateEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+const validatePhone = (value: string) => /^\d{10}$/.test(value);
+const validateDate = (value: string) => !isNaN(Date.parse(value));
 ```
 
-### Server Component Template
+### **Field Formatting**
 ```typescript
-import { YourPageClient } from "./client-page";
-
-export default function YourPage() {
-  return <YourPageClient />;
-}
+// Custom field display names
+const formatFieldName = (fieldName: string) => {
+  const labels = {
+    'customerEmail': 'Customer Email Address',
+    'productSku': 'Product SKU',
+    'orderQuantity': 'Order Quantity'
+  };
+  return labels[fieldName] || fieldName.charAt(0).toUpperCase() + fieldName.slice(1);
+};
 ```
 
-## Troubleshooting Guide
+### **Business Logic Hooks**
+```typescript
+// Add custom pre-processing before sending to N8N
+const handleSendToN8n = () => {
+  // Custom validation
+  if (inputData.orderQuantity && parseInt(inputData.orderQuantity) > 100) {
+    toast.error("Large orders require manager approval");
+    return;
+  }
+  
+  // Data transformation
+  const processedData = {
+    ...inputData,
+    orderQuantity: parseInt(inputData.orderQuantity)
+  };
+  
+  sendToN8n(processedData);
+};
+```
 
-### Common Errors and Solutions
+## 📊 **Database Field Management**
 
-**Error**: "Field does not exist in database"
-**Solution**: Run `npm run add-field fieldName` and restart dev server
+### **Valid Field Names**
+- ✅ `customerName`, `order_status`, `shipment123`
+- ❌ `customer-name`, `order status`, `123order`
 
-**Error**: "SSE connection failed"
-**Solution**: Check `/api/stream/user-updates` endpoint is running
+### **Reserved Field Names**
+- `UID` (user identifier)
+- `created_at` (timestamp)
+- `updated_at` (timestamp)
 
-**Error**: "n8n webhook not received"
-**Solution**: Verify n8n sends to `/api/webhooks/internal-updated` with correct format
+### **Field Type Mapping**
+```typescript
+// Database column types
+const fieldTypes = {
+  'email': 'VARCHAR(255)',
+  'phone': 'VARCHAR(20)',
+  'date': 'DATE',
+  'number': 'INTEGER',
+  'text': 'TEXT',
+  'boolean': 'BOOLEAN'
+};
+```
 
-**Error**: "TypeScript errors on fieldInputs"
-**Solution**: Ensure all field names in DEVELOPMENT_FIELDS are strings
+## 🔍 **Debug Commands**
 
-**Error**: "Fields not highlighting after webhook"
-**Solution**: Check webhook includes correct `updatedFields` array
+### **Database Connection**
+```bash
+# Test database connection
+npm run dev
+# Visit /n8n-demo and click "Test Connection"
+```
 
-## Performance Tips
+### **Field Verification**
+```bash
+# Check database columns
+# Visit /n8n-demo and click "Show Debug Info"
+```
 
-- Keep DEVELOPMENT_FIELDS array small (< 20 fields)
-- Use field grouping for pages with many fields
-- Avoid frequent database updates in n8n workflows
-- Use batch operations when processing multiple fields 
+### **N8N Payload Testing**
+```bash
+# Check browser network tab when sending to N8N
+# Look for POST requests to /api/trpc/internal.sendToN8n
+```
+
+## 🚀 **Performance Tips**
+
+### **Development Mode**
+```bash
+# Hot reload for faster development
+npm run dev
+
+# Clear cache if needed
+rm -rf .next/cache
+```
+
+### **Production Optimization**
+```bash
+# Build for production
+npm run build
+
+# Start production server
+npm start
+```
+
+## 🎨 **UI Customization**
+
+### **Card Layout**
+```typescript
+// Add custom card sections
+<Card>
+  <CardHeader>
+    <CardTitle>Your Section Title</CardTitle>
+  </CardHeader>
+  <CardContent>
+    {/* Your custom content */}
+  </CardContent>
+</Card>
+```
+
+### **Field Grouping**
+```typescript
+// Group related fields
+const CONTACT_FIELDS = ['customerEmail', 'customerPhone'];
+const ORDER_FIELDS = ['productSku', 'orderQuantity'];
+```
+
+### **Conditional Display**
+```typescript
+// Show/hide fields based on conditions
+{userData?.userType === 'admin' && (
+  <div>Admin-only fields</div>
+)}
+```
+
+## 🔐 **Security Checklist**
+
+- [ ] Environment variables configured
+- [ ] N8N webhook secret validated
+- [ ] Database connections secured
+- [ ] Field validation enabled
+- [ ] Authentication required
+- [ ] Error logging configured
+
+## 📋 **Testing Checklist**
+
+- [ ] All INPUT_FIELDS display correctly
+- [ ] All PERSISTENT_FIELDS save to database
+- [ ] N8N receives correct payload format
+- [ ] N8N returns correct response format
+- [ ] Real-time updates work
+- [ ] Error handling works
+- [ ] Field validation works
+
+---
+
+**🔗 For detailed field configuration examples, see the [Complete Template Guide](./complete-template-guide.md)** 
