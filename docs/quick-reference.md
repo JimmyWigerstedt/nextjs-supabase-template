@@ -77,68 +77,6 @@ Your workflow should send back:
 }
 ```
 
-## 📚 **Field Configuration Patterns**
-
-### **E-commerce Order Processing**
-```typescript
-const INPUT_FIELDS = [
-  'customerEmail', 'productSku', 'orderQuantity', 'shippingAddress'
-];
-const PERSISTENT_FIELDS = [
-  'orderStatus', 'trackingNumber', 'estimatedDelivery', 'customerNotes'
-];
-```
-
-### **Customer Support System**
-```typescript
-const INPUT_FIELDS = [
-  'ticketSubject', 'issueCategory', 'priorityLevel', 'customerMessage'
-];
-const PERSISTENT_FIELDS = [
-  'assignedAgent', 'ticketStatus', 'estimatedResolution', 'internalNotes'
-];
-```
-
-### **Content Management**
-```typescript
-const INPUT_FIELDS = [
-  'contentTitle', 'contentType', 'publishDate', 'contentBody'
-];
-const PERSISTENT_FIELDS = [
-  'contentStatus', 'seoScore', 'reviewerNotes', 'publishedUrl'
-];
-```
-
-### **CRM Lead Management**
-```typescript
-const INPUT_FIELDS = [
-  'leadName', 'leadEmail', 'leadPhone', 'leadSource', 'interestLevel'
-];
-const PERSISTENT_FIELDS = [
-  'leadScore', 'assignedSalesRep', 'salesStage', 'followUpDate', 'salesNotes'
-];
-```
-
-### **Financial Processing**
-```typescript
-const INPUT_FIELDS = [
-  'transactionAmount', 'transactionType', 'merchantId', 'customerId'
-];
-const PERSISTENT_FIELDS = [
-  'riskScore', 'transactionStatus', 'complianceNotes', 'reviewNotes'
-];
-```
-
-### **HR Applications**
-```typescript
-const INPUT_FIELDS = [
-  'applicantName', 'applicantEmail', 'positionApplied', 'resumeUrl'
-];
-const PERSISTENT_FIELDS = [
-  'applicationStatus', 'skillsMatch', 'interviewDate', 'hrNotes'
-];
-```
-
 ## 🏗️ **File Structure**
 
 ```
@@ -199,145 +137,146 @@ const formatFieldName = (fieldName: string) => {
   const labels = {
     'customerEmail': 'Customer Email Address',
     'productSku': 'Product SKU',
-    'orderQuantity': 'Order Quantity',
-    'orderStatus': 'Order Status',
-    'trackingNumber': 'Tracking Number',
-    'customerNotes': 'Customer Notes'
+    'orderQuantity': 'Order Quantity'
   };
-  return labels[fieldName] || 
-    fieldName.charAt(0).toUpperCase() + 
-    fieldName.slice(1).replace(/([A-Z])/g, ' $1');
+  return labels[fieldName] || fieldName.charAt(0).toUpperCase() + fieldName.slice(1);
 };
 ```
 
-### **Business Logic**
+### **Business Logic Hooks**
 ```typescript
-// Custom pre-processing
+// Add custom pre-processing before sending to N8N
 const handleSendToN8n = () => {
-  // Add validation
+  // Custom validation
   if (inputData.orderQuantity && parseInt(inputData.orderQuantity) > 100) {
     toast.error("Large orders require manager approval");
     return;
   }
   
-  // Add data transformation
+  // Data transformation
   const processedData = {
     ...inputData,
-    orderQuantity: parseInt(inputData.orderQuantity),
-    orderTotal: calculateTotal(inputData)
+    orderQuantity: parseInt(inputData.orderQuantity)
   };
   
   sendToN8n(processedData);
 };
 ```
 
-## 🛠️ **Database Setup**
+## 📊 **Database Field Management**
 
-### **Adding Fields**
-```bash
-# Add each PERSISTENT_FIELD to database
-npm run add-field fieldName [type]
+### **Valid Field Names**
+- ✅ `customerName`, `order_status`, `shipment123`
+- ❌ `customer-name`, `order status`, `123order`
 
-# Examples:
-npm run add-field orderStatus VARCHAR
-npm run add-field customerScore INTEGER
-npm run add-field orderNotes TEXT
+### **Reserved Field Names**
+- `UID` (user identifier)
+- `created_at` (timestamp)
+- `updated_at` (timestamp)
+
+### **Field Type Mapping**
+```typescript
+// Database column types
+const fieldTypes = {
+  'email': 'VARCHAR(255)',
+  'phone': 'VARCHAR(20)',
+  'date': 'DATE',
+  'number': 'INTEGER',
+  'text': 'TEXT',
+  'boolean': 'BOOLEAN'
+};
 ```
 
-### **Field Validation Rules**
-- **Valid Names**: `customerName`, `order_status`, `shipment123`
-- **Invalid Names**: `customer-name`, `order status`, `123order`
-- **Reserved**: `UID`, `created_at`, `updated_at`
+## 🔍 **Debug Commands**
 
-## 🧪 **Testing Workflow**
-
-### **1. Database Testing**
-- Visit `/n8n-demo`
-- Click "Show Debug" to verify database connection
-- Check that all PERSISTENT_FIELDS exist as columns
-
-### **2. Form Testing**
-- Enter data in INPUT_FIELDS
-- Click "Send to N8N"
-- Verify payload format in browser network tab
-
-### **3. N8N Integration**
-- Check N8N receives correct payload structure
-- Verify N8N webhook returns correct response format
-- Confirm real-time UI updates work
-
-### **4. Real-Time Updates**
-- SSE connection status should show "Live Updates Connected"
-- Field updates should highlight green for 3 seconds
-- Updated values should appear automatically
-
-## 🚨 **Troubleshooting**
-
-### **Common Issues**
-- **Fields not displaying**: Check `INPUT_FIELDS` array syntax
-- **Database errors**: Ensure `PERSISTENT_FIELDS` have database columns
-- **N8N connection failed**: Verify `N8N_BASE_URL` and `N8N_WEBHOOK_SECRET`
-- **No real-time updates**: Check N8N webhook response format
-
-### **Debug Commands**
+### **Database Connection**
 ```bash
 # Test database connection
 npm run dev
 # Visit /n8n-demo and click "Test Connection"
-
-# Check database schema
-# Visit /n8n-demo and click "Show Debug Info"
-
-# Monitor N8N requests
-# Check browser network tab when sending to N8N
 ```
 
-## ✅ **Success Checklist**
+### **Field Verification**
+```bash
+# Check database columns
+# Visit /n8n-demo and click "Show Debug Info"
+```
 
-Your template adaptation is successful when:
-- [ ] Form displays all INPUT_FIELDS correctly
-- [ ] Database stores all PERSISTENT_FIELDS properly
-- [ ] N8N receives standardized payload structure
-- [ ] N8N returns standardized response format
-- [ ] Real-time updates highlight changed fields
-- [ ] User can edit and save persistent fields
-- [ ] SSE connection shows "Connected" status
-- [ ] No console errors in browser dev tools
+### **N8N Payload Testing**
+```bash
+# Check browser network tab when sending to N8N
+# Look for POST requests to /api/trpc/internal.sendToN8n
+```
 
-## 🎯 **Performance Tips**
+## 🚀 **Performance Tips**
 
-### **Field Organization**
-- Keep INPUT_FIELDS focused (5-10 fields max)
-- Group related PERSISTENT_FIELDS together
-- Use clear, descriptive field names
+### **Development Mode**
+```bash
+# Hot reload for faster development
+npm run dev
 
-### **N8N Optimization**
-- Process fields in parallel when possible
-- Return minimal `updatedFields` array
-- Use proper error handling in workflows
+# Clear cache if needed
+rm -rf .next/cache
+```
 
-### **UI Optimization**
-- Add loading states for better UX
-- Use field validation to prevent errors
-- Group related fields in separate cards
+### **Production Optimization**
+```bash
+# Build for production
+npm run build
 
-## 📊 **Template Benefits**
+# Start production server
+npm start
+```
 
-### **Development Speed**
-- **Traditional**: 2-3 hours per field
-- **Template**: 30 seconds per field
-- **Improvement**: 99.5% faster
+## 🎨 **UI Customization**
 
-### **Maintenance**
-- **Traditional**: 15+ files to modify per field
-- **Template**: 1 array to update
-- **Improvement**: 95% less maintenance
+### **Card Layout**
+```typescript
+// Add custom card sections
+<Card>
+  <CardHeader>
+    <CardTitle>Your Section Title</CardTitle>
+  </CardHeader>
+  <CardContent>
+    {/* Your custom content */}
+  </CardContent>
+</Card>
+```
 
-### **Type Safety**
-- **Traditional**: Manual type updates
-- **Template**: Automatic inference
-- **Improvement**: Zero type errors
+### **Field Grouping**
+```typescript
+// Group related fields
+const CONTACT_FIELDS = ['customerEmail', 'customerPhone'];
+const ORDER_FIELDS = ['productSku', 'orderQuantity'];
+```
+
+### **Conditional Display**
+```typescript
+// Show/hide fields based on conditions
+{userData?.userType === 'admin' && (
+  <div>Admin-only fields</div>
+)}
+```
+
+## 🔐 **Security Checklist**
+
+- [ ] Environment variables configured
+- [ ] N8N webhook secret validated
+- [ ] Database connections secured
+- [ ] Field validation enabled
+- [ ] Authentication required
+- [ ] Error logging configured
+
+## 📋 **Testing Checklist**
+
+- [ ] All INPUT_FIELDS display correctly
+- [ ] All PERSISTENT_FIELDS save to database
+- [ ] N8N receives correct payload format
+- [ ] N8N returns correct response format
+- [ ] Real-time updates work
+- [ ] Error handling works
+- [ ] Field validation works
 
 ---
 
-**⚡ Ready to build?** Pick a field pattern above, follow the checklist, and you'll have a working system in minutes! 
+**🔗 For detailed field configuration examples, see the [Complete Template Guide](./complete-template-guide.md)** 
