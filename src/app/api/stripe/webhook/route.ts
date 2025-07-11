@@ -56,6 +56,21 @@ export async function POST(request: NextRequest) {
           break;
         }
         
+        // DEBUG: Log invoice structure for debugging
+        const invoiceDebug = invoice as Stripe.Invoice & {
+          subscription?: string | Stripe.Subscription;
+          subscription_details?: { metadata?: Record<string, string> };
+          billing_reason?: string;
+        };
+        console.log(`[webhook] Invoice debug:`, {
+          invoiceId: invoice.id,
+          subscriptionId: typeof invoiceDebug.subscription === 'string' ? invoiceDebug.subscription : invoiceDebug.subscription?.id,
+          hasSubscriptionDetails: !!invoiceDebug.subscription_details,
+          subscriptionDetailsMetadata: invoiceDebug.subscription_details?.metadata,
+          lineItemsCount: invoice.lines.data.length,
+          billingReason: invoiceDebug.billing_reason,
+        });
+        
         // Extract user ID from invoice subscription metadata
         const userId = await subscriptionService.extractUserIdFromInvoice(invoice);
         if (!userId) {

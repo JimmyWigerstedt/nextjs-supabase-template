@@ -45,6 +45,7 @@ export const paymentsRouter = createTRPCRouter({
         success_url: `${env.BASE_URL}/dashboard?checkout=success`,
         cancel_url: `${env.BASE_URL}/pricing`,
         customer: customerId,
+        client_reference_id: user.id,
         metadata: {
           user_id: user.id,
         },

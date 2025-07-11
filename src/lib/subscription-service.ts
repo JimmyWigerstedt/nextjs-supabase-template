@@ -363,43 +363,50 @@ export class SubscriptionService {
   }
 
   /**
-   * Extract user ID from invoice using cache-first strategy
+   * Extract user ID from invoice using correct Stripe invoice structure
    * 
-   * Implementation notes: Uses multi-tier approach to avoid unnecessary API calls:
-   * 1. Check line item metadata (most reliable)
-   * 2. Check parent subscription details metadata
+   * Implementation notes: Uses correct Stripe invoice structure to find user_id:
+   * 1. Check invoice.subscription_details.metadata (most reliable)
+   * 2. Check subscription line item metadata
    * 3. Fallback to API call to subscription metadata (last resort)
    * Used by: Invoice payment processing to identify the user
    */
   async extractUserIdFromInvoice(invoice: Stripe.Invoice): Promise<string | null> {
     try {
-      // FIRST: Check line item metadata (most reliable)
-      for (const lineItem of invoice.lines.data) {
-        const userId = lineItem.metadata?.user_id;
-        if (userId) {
-          console.log(`[credits] Found user_id in line item metadata: ${userId}`);
-          return userId;
-        }
-      }
+      // FIRST: Check invoice subscription_details metadata (most reliable)
+      // Use type assertion to access subscription_details which may not be in the TypeScript definition
+      const invoiceWithDetails = invoice as Stripe.Invoice & {
+        subscription_details?: { metadata?: { user_id?: string } };
+      };
       
-      // SECOND: Check parent subscription details metadata
+      if (invoiceWithDetails.subscription_details?.metadata?.user_id) {
+        console.log(`[credits] Found user_id in invoice.subscription_details.metadata: ${invoiceWithDetails.subscription_details.metadata.user_id}`);
+        return invoiceWithDetails.subscription_details.metadata.user_id;
+      }
+
+      // SECOND: Check subscription line item metadata
       for (const lineItem of invoice.lines.data) {
-        // Type-safe access to nested parent metadata
-        const parent = lineItem.parent as {
-          subscription_details?: { metadata?: { user_id?: string } };
-          subscription_item_details?: { metadata?: { user_id?: string } };
+        // Use type assertion to access type property which may not be in the TypeScript definition
+        const lineItemWithType = lineItem as Stripe.InvoiceLineItem & {
+          type?: string;
         };
-        const parentUserId = parent?.subscription_details?.metadata?.user_id ?? 
-                           parent?.subscription_item_details?.metadata?.user_id;
-        if (parentUserId) {
-          console.log(`[credits] Found user_id in parent subscription details: ${parentUserId}`);
-          return parentUserId;
+        
+        if (lineItemWithType.type === 'subscription' && lineItem.metadata?.user_id) {
+          console.log(`[credits] Found user_id in subscription line item metadata: ${lineItem.metadata.user_id}`);
+          return lineItem.metadata.user_id;
         }
       }
       
       // THIRD: Fallback to API call (existing behavior)
       console.log(`[credits] No user_id found in invoice payload, falling back to API call`);
-      const subscriptionId = (invoice as Stripe.Invoice & { subscription?: string }).subscription;
+      const invoiceWithSubscription = invoice as Stripe.Invoice & {
+        subscription?: string | Stripe.Subscription;
+      };
+      
+      const subscriptionId = typeof invoiceWithSubscription.subscription === 'string' 
+        ? invoiceWithSubscription.subscription 
+        : invoiceWithSubscription.subscription?.id;
+        
       if (!subscriptionId) {
         console.log(`[credits] Invoice ${invoice.id} has no subscription`);
         return null;
