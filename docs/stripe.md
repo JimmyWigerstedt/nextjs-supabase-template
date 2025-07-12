@@ -24,12 +24,151 @@
 2. **Lazy Reconciliation**: When local data is missing, system queries Stripe and updates cache
 3. **Direct API Fallback**: Critical operations (portal creation, checkout) always use fresh Stripe data
 
-### Data Storage Pattern
-Despite "minimal" claims in comments, the system stores comprehensive subscription metadata:
-- `stripe_customer_id`: Stripe customer identifier
-- `stripe_subscription_id`: Stripe subscription identifier  
-- `subscription_plan`: Resolved product name for feature access control
-- `subscription_status`: Subscription lifecycle state
+### Database Schema (userData Table)
+The system stores comprehensive subscription metadata in the `userData` table:
+```sql
+-- Stripe-related fields in userData table
+"stripe_customer_id" VARCHAR,      -- Stripe customer identifier
+"stripe_subscription_id" VARCHAR,  -- Stripe subscription identifier  
+"subscription_plan" VARCHAR,       -- Resolved product name for feature access
+"subscription_status" VARCHAR,     -- Subscription lifecycle state
+"usage_credits" INTEGER DEFAULT 0  -- Current usage credits balance
+```
+
+## User ID Flow Architecture
+
+### 1. Initial Checkout Flow
+```typescript
+// src/lib/payments/actions.ts - createCheckoutSession
+const session = await stripe.checkout.sessions.create({
+  customer: customerId,
+  client_reference_id: user.id,        // PRIMARY user identification
+  metadata: {
+    user_id: user.id,                   // SECONDARY user identification
+  },
+  subscription_data: {
+    metadata: {
+      user_id: user.id,                 // EMBEDDED in subscription metadata
+      usage_credits: usageCredits.toString(),
+    },
+  },
+});
+```
+
+### 2. Customer Creation Flow
+```typescript
+// src/lib/subscription-service.ts - ensureStripeCustomer
+const customer = await stripe.customers.create({
+  email,
+  metadata: {
+    user_id: userId,                    // EMBEDDED in customer metadata
+  },
+});
+```
+
+### 3. Webhook User ID Extraction Strategy
+The system uses a **multi-tier fallback approach** for extracting user IDs from webhook events:
+
+```typescript
+// TIER 1: Invoice parent subscription_details metadata (most reliable)
+invoice.parent?.subscription_details?.metadata?.user_id
+
+// TIER 2: Line item parent subscription_details metadata
+lineItem.parent?.subscription_details?.metadata?.user_id
+
+// TIER 3: Direct line item metadata (for subscription line items)
+lineItem.metadata?.user_id
+
+// TIER 4: API fallback to subscription metadata (last resort)
+stripe.subscriptions.retrieve(subscriptionId).metadata.user_id
+```
+
+## Webhook Body Structure & Credit Allocation
+
+### Critical Webhook: `invoice.payment_succeeded`
+
+#### Webhook Body Pathing for Credits
+The system extracts `usage_credits` from **price-level metadata** (not product metadata):
+
+```typescript
+// PRIMARY: Fetch current subscription state (most reliable)
+const subscription = await stripe.subscriptions.retrieve(subscriptionId, {
+  expand: ['items.data.price']
+});
+
+// Extract credits from PRICE metadata
+for (const item of subscription.items.data) {
+  const creditsStr = item.price.metadata?.usage_credits;  // KEY PATH
+  const credits = parseInt(creditsStr, 10);
+  totalCredits += credits;
+}
+```
+
+#### Fallback Strategies for Credit Extraction
+```typescript
+// FALLBACK 1: Invoice parent subscription_details metadata
+invoice.parent?.subscription_details?.metadata?.usage_credits
+
+// FALLBACK 2: Line item metadata  
+lineItem.metadata?.usage_credits
+```
+
+### Billing Reason Logic
+The system uses `invoice.billing_reason` to determine credit allocation behavior:
+
+```typescript
+switch (billingReason) {
+  case 'subscription_cycle':
+    // Regular renewal - REPLACE credits (fresh billing period)
+    await setUserCredits(userId, credits);
+    break;
+    
+  case 'subscription_update':
+    // Plan change - ADD credits (prorated amount)
+    await addUserCredits(userId, credits);
+    break;
+    
+  case 'subscription_create':
+    // Initial signup - SET credits
+    await setUserCredits(userId, credits);
+    break;
+    
+  case 'manual':
+    // Add-on purchase - ADD credits
+    await addUserCredits(userId, credits);
+    break;
+}
+```
+
+### Idempotency Protection
+```typescript
+// Current: In-memory Set (development only)
+private processedInvoices = new Set<string>();
+
+// Production recommendation: Redis/Database
+// await redis.set(`invoice:${invoiceId}:processed`, 'true', 'EX', 86400);
+```
+
+## Webhook Event Coverage
+
+### Processed Events
+1. **`invoice.payment_succeeded`**: Payment-first credit allocation
+2. **`checkout.session.completed`**: Post-checkout subscription sync
+3. **`customer.subscription.updated`**: Plan changes and status updates
+4. **`customer.subscription.deleted`**: Subscription cleanup
+
+### Webhook Event Flow
+```typescript
+// Event: customer.subscription.updated
+await subscriptionService.syncSubscriptionFromWebhook(subscription);
+// Updates: customer_id, subscription_id, plan, status (NOT credits)
+
+// Event: invoice.payment_succeeded  
+const userId = await subscriptionService.extractUserIdFromInvoice(invoice);
+const credits = await subscriptionService.calculateCreditsFromInvoice(invoice);
+await subscriptionService.handleCreditAllocation(billingReason, userId, credits);
+// Updates: usage_credits based on billing_reason
+```
 
 ## Performance Strategy
 
@@ -136,4 +275,18 @@ async getActiveSubscription(userId: string) {
 - **Authoritative Fallback**: Critical operations always verify against Stripe
 - **Reconciliation**: Missing local data triggers automatic sync from Stripe
 
-This architecture prioritizes performance and reliability while maintaining data accuracy through a sophisticated synchronization strategy that is far more complex than the inline comments suggest. 
+## Common Integration Patterns
+
+### Setting Up Credits in Stripe
+1. Create Products in Stripe Dashboard
+2. Create Prices with metadata: `usage_credits: "1000"`
+3. Credits are automatically extracted during checkout and webhook processing
+
+### Handling Plan Changes
+1. User changes plan in Customer Portal
+2. `customer.subscription.updated` webhook fires
+3. Subscription metadata synced (plan name, status)
+4. `invoice.payment_succeeded` webhook fires
+5. Credits allocated based on billing_reason
+
+This architecture prioritizes performance and reliability while maintaining data accuracy through a sophisticated synchronization strategy that handles the complexities of subscription management and credit allocation in a production environment. 
