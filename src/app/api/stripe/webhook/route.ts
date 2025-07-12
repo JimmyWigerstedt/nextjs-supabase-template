@@ -43,11 +43,13 @@ export async function POST(request: NextRequest) {
         console.log(`[webhook] Invoice payment succeeded: ${invoice.id}`);
         
         /**
-         * Payment-first credit allocation
+         * SUBSCRIPTION PAYMENT PROCESSING
          * 
-         * Implementation notes: Processes invoice payment to allocate credits only when
-         * money is actually collected. Uses billing_reason to determine ADD vs REPLACE
-         * logic and includes proper idempotency protection.
+         * Implementation notes: Processes subscription invoice payments to allocate credits only when
+         * money is actually collected. Uses billing_reason to determine ADD vs REPLACE logic.
+         * 
+         * NOTE: This handler is ONLY for subscription-related invoices. One-time payments
+         * do NOT generate invoices and are handled in checkout.session.completed instead.
          */
         
         // Validate invoice ID
@@ -56,82 +58,11 @@ export async function POST(request: NextRequest) {
           break;
         }
         
-        // DEBUG: Log invoice structure for debugging
-        const invoiceDebug = invoice as Stripe.Invoice & {
-          subscription?: string | Stripe.Subscription;
-          subscription_details?: { metadata?: Record<string, string> };
-          billing_reason?: string;
-          parent?: { 
-            subscription_details?: { metadata?: Record<string, string> };
-          };
-        };
-        console.log(`[webhook] Invoice debug:`, {
-          invoiceId: invoice.id,
-          subscriptionId: typeof invoiceDebug.subscription === 'string' ? invoiceDebug.subscription : invoiceDebug.subscription?.id,
-          hasSubscriptionDetails: !!invoiceDebug.subscription_details,
-          subscriptionDetailsMetadata: invoiceDebug.subscription_details?.metadata,
-          hasParent: !!invoiceDebug.parent,
-          parentSubscriptionDetails: invoiceDebug.parent?.subscription_details?.metadata,
-          lineItemsCount: invoice.lines.data.length,
-          billingReason: invoiceDebug.billing_reason,
-        });
-        
-        // DEBUG: Log line item structure for debugging
-        if (invoice.lines.data.length > 0) {
-          console.log(`[webhook] Line items debug:`, invoice.lines.data.map(item => {
-            const lineItemWithParent = item as Stripe.InvoiceLineItem & {
-              parent?: {
-                type?: string;
-                subscription_details?: { metadata?: Record<string, string> };
-              };
-            };
-            
-            return {
-              id: item.id,
-              hasMetadata: !!item.metadata && Object.keys(item.metadata).length > 0,
-              metadata: item.metadata,
-              hasParent: !!lineItemWithParent.parent,
-              parentType: lineItemWithParent.parent?.type,
-              parentSubscriptionDetails: lineItemWithParent.parent?.subscription_details?.metadata,
-            };
-          }));
-        }
-        
-        // Check if this is a one-time purchase or subscription
-        const invoiceWithSubscription = invoice as Stripe.Invoice & {
-          subscription?: string | Stripe.Subscription;
-        };
-        const isOneTimePurchase = !invoiceWithSubscription.subscription;
-        
-        let userId: string | null = null;
-        let totalCredits = 0;
-        
-        if (isOneTimePurchase) {
-          console.log(`[webhook] Processing one-time purchase invoice ${invoice.id}`);
-          
-          // For one-time purchases, extract user ID from payment intent metadata
-          userId = await subscriptionService.extractUserIdFromOneTimePurchase(invoice);
-          
-          if (!userId) {
-            console.error('[webhook] No user_id found in one-time purchase invoice');
-            break;
-          }
-          
-          // Calculate credits from invoice line items for one-time purchases
-          totalCredits = await subscriptionService.calculateCreditsFromOneTimePurchase(invoice);
-        } else {
-          console.log(`[webhook] Processing subscription invoice ${invoice.id}`);
-          
-          // For subscriptions, use existing logic
-          userId = await subscriptionService.extractUserIdFromInvoice(invoice);
-          
-          if (!userId) {
-            console.error('[webhook] No user_id found in subscription invoice');
-            break;
-          }
-          
-          // Calculate credits from current subscription state
-          totalCredits = await subscriptionService.calculateCreditsFromInvoice(invoice);
+        // Extract user ID from subscription invoice metadata
+        const userId = await subscriptionService.extractUserIdFromInvoice(invoice);
+        if (!userId) {
+          console.error('[webhook] No user_id found in subscription invoice');
+          break;
         }
         
         // Check idempotency to prevent duplicate processing
@@ -140,19 +71,16 @@ export async function POST(request: NextRequest) {
           break;
         }
         
+        // Calculate credits from current subscription state
+        const totalCredits = await subscriptionService.calculateCreditsFromInvoice(invoice);
+        
         if (totalCredits > 0) {
-          if (isOneTimePurchase) {
-            // For one-time purchases, always ADD credits
-            await subscriptionService.handleCreditAllocation('manual', userId, totalCredits);
-            console.log(`[webhook] ✅ Added ${totalCredits} credits to user ${userId} for one-time purchase ${invoice.id}`);
-          } else {
-            // For subscriptions, use billing reason logic
-            const billingReason = invoice.billing_reason ?? 'manual';
-            await subscriptionService.handleCreditAllocation(billingReason, userId, totalCredits);
-            console.log(`[webhook] ✅ Allocated ${totalCredits} credits to user ${userId} for subscription invoice ${invoice.id}`);
-          }
+          // For subscriptions, use billing reason logic
+          const billingReason = invoice.billing_reason ?? 'manual';
+          await subscriptionService.handleCreditAllocation(billingReason, userId, totalCredits);
+          console.log(`[webhook] ✅ Allocated ${totalCredits} credits to user ${userId} for subscription invoice ${invoice.id}`);
         } else {
-          console.log(`[webhook] No credits found in invoice ${invoice.id} - processing without credit allocation`);
+          console.log(`[webhook] No credits found in subscription invoice ${invoice.id} - processing without credit allocation`);
         }
         
         // Always mark invoice as processed for idempotency (even if no credits)
@@ -161,18 +89,79 @@ export async function POST(request: NextRequest) {
       
       case 'checkout.session.completed':
         const session = event.data.object;
-        console.log(`[webhook] Checkout completed: ${session.id}`);
+        console.log(`[webhook] Checkout completed: ${session.id}, mode: ${session.mode}, status: ${session.status}, payment_status: ${session.payment_status}`);
         
         /**
-         * Post-checkout subscription sync
+         * HYBRID CHECKOUT PROCESSING
          * 
-         * Implementation notes: For subscription checkouts, retrieves the created
-         * subscription from Stripe and syncs to local cache. Ensures immediate
-         * availability of subscription data after successful payment.
+         * This handler processes TWO types of checkout completions:
+         * 1. SUBSCRIPTION CHECKOUTS: Sync subscription data to local cache
+         * 2. ONE-TIME PAYMENT CHECKOUTS: Process credit allocation immediately
+         * 
+         * NOTE: One-time payments do NOT generate invoices, so we must handle
+         * credit allocation here rather than waiting for invoice.payment_succeeded
+         * which will never fire for one-time payments.
          */
-        if (session.mode === 'subscription' && session.subscription) {
+        
+        // Handle ONE-TIME PAYMENTS (Credit Bundles)
+        if (session.mode === 'payment' && 
+            session.payment_status === 'paid' && 
+            session.status === 'complete') {
+          
+          console.log(`[webhook] Processing one-time payment: ${session.id}`);
+          
+          // Extract user ID and credits directly from session metadata
+          const userId = session.metadata?.user_id;
+          const creditsStr = session.metadata?.usage_credits;
+          
+          if (!userId) {
+            console.error(`[webhook] No user_id found in one-time payment session ${session.id} metadata`);
+            break;
+          }
+          
+          if (!creditsStr) {
+            console.error(`[webhook] No usage_credits found in one-time payment session ${session.id} metadata`);
+            break;
+          }
+          
+          const credits = parseInt(creditsStr, 10);
+          if (isNaN(credits) || credits <= 0) {
+            console.error(`[webhook] Invalid usage_credits in session ${session.id}: ${creditsStr}`);
+            break;
+          }
+          
+          // Check idempotency to prevent duplicate processing
+          if (await subscriptionService.isSessionProcessed(session.id)) {
+            console.log(`[webhook] Session ${session.id} already processed, skipping`);
+            break;
+          }
+          
+          // For one-time purchases, always ADD credits (never replace)
+          await subscriptionService.handleCreditAllocation('manual', userId, credits);
+          console.log(`[webhook] ✅ Added ${credits} credits to user ${userId} for one-time purchase ${session.id}`);
+          
+          // Mark session as processed for idempotency
+          await subscriptionService.markSessionProcessed(session.id);
+        }
+        
+        // Handle SUBSCRIPTION CHECKOUTS
+        else if (session.mode === 'subscription' && session.subscription) {
+          console.log(`[webhook] Processing subscription checkout: ${session.id}`);
+          
+          /**
+           * Post-checkout subscription sync
+           * 
+           * Implementation notes: For subscription checkouts, retrieves the created
+           * subscription from Stripe and syncs to local cache. Ensures immediate
+           * availability of subscription data after successful payment.
+           */
           const subscription = await stripe.subscriptions.retrieve(session.subscription as string);
           await subscriptionService.syncSubscriptionFromWebhook(subscription);
+        }
+        
+        // Log unhandled checkout types for debugging
+        else {
+          console.log(`[webhook] Unhandled checkout type - mode: ${session.mode}, payment_status: ${session.payment_status}, status: ${session.status}`);
         }
         break;
       

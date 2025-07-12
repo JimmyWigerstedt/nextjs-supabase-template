@@ -181,15 +181,7 @@ export const paymentsRouter = createTRPCRouter({
       );
 
       // Filter out products with no one-time prices
-      const filteredProducts = productWithPrices.filter(product => product.prices.length > 0);
-      
-      // Temporary debugging
-      console.log('[getOneTimeProducts] Raw products fetched:', products.data.length);
-      console.log('[getOneTimeProducts] Products with prices:', productWithPrices.length);
-      console.log('[getOneTimeProducts] Final filtered products:', filteredProducts.length);
-      console.log('[getOneTimeProducts] Final products data:', JSON.stringify(filteredProducts, null, 2));
-      
-      return filteredProducts;
+      return productWithPrices.filter(product => product.prices.length > 0);
     }),
 
   /**
