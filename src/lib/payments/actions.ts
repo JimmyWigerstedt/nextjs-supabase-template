@@ -150,7 +150,7 @@ export const paymentsRouter = createTRPCRouter({
       // Get all one-time products (like "Credit Bundle")
       const products = await stripe.products.list({
         active: true,
-        type: 'good', // one-time purchases are typically 'good' type
+        type: 'service', // Credit bundles are service type products
         limit: 100,
       });
 
@@ -181,7 +181,15 @@ export const paymentsRouter = createTRPCRouter({
       );
 
       // Filter out products with no one-time prices
-      return productWithPrices.filter(product => product.prices.length > 0);
+      const filteredProducts = productWithPrices.filter(product => product.prices.length > 0);
+      
+      // Temporary debugging
+      console.log('[getOneTimeProducts] Raw products fetched:', products.data.length);
+      console.log('[getOneTimeProducts] Products with prices:', productWithPrices.length);
+      console.log('[getOneTimeProducts] Final filtered products:', filteredProducts.length);
+      console.log('[getOneTimeProducts] Final products data:', JSON.stringify(filteredProducts, null, 2));
+      
+      return filteredProducts;
     }),
 
   /**

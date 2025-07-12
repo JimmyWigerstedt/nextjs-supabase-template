@@ -35,6 +35,11 @@ export function PricingPageClient() {
   const { data: oneTimeProducts, isLoading: isLoadingOneTime } = clientApi.payments.getOneTimeProducts.useQuery();
   const { data: currentSubscription } = clientApi.payments.getCurrentSubscription.useQuery();
 
+  // Temporary debugging
+  console.log('[PricingPageClient] oneTimeProducts:', oneTimeProducts);
+  console.log('[PricingPageClient] isLoadingOneTime:', isLoadingOneTime);
+  console.log('[PricingPageClient] Will render Credit Bundle section:', !!(oneTimeProducts && oneTimeProducts.length > 0));
+
   // Show success message when redirected from successful checkout
   useEffect(() => {
     if (searchParams.get('checkout') === 'success') {
@@ -249,6 +254,10 @@ interface CreditBundleCardProps {
 }
 
 function CreditBundleCard({ product }: CreditBundleCardProps) {
+  // Temporary debugging
+  console.log('[CreditBundleCard] Rendering product:', product);
+  console.log('[CreditBundleCard] Product prices:', product.prices);
+  
   const [selectedPriceId, setSelectedPriceId] = useState<string>(() => {
     // Default to first price if available
     return product.prices.length > 0 ? product.prices[0]!.id : '';
