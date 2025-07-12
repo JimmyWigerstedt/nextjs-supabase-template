@@ -3,9 +3,7 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
-import { LoginModal } from "~/components/ui/login-modal";
-import { clientApi } from "~/trpc/react";
-import { useState } from "react";
+import { AppHeader } from "~/components/layout/AppHeader";
 import Link from "next/link";
 
 // Template card data
@@ -61,56 +59,10 @@ const TEMPLATE_CARDS = [
 ];
 
 export function DashboardClient() {
-  const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
-  
-  const { data: userData } = clientApi.internal.getUserData.useQuery();
-
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            {/* Logo */}
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <h1 className="text-xl font-bold text-gray-900">N8N Templates</h1>
-              </div>
-            </div>
-            
-            {/* Navigation */}
-            <div className="flex items-center space-x-4">
-              {/* Usage Credits Counter */}
-              <div className="flex items-center space-x-2 px-3 py-1 bg-blue-50 rounded-full border">
-                <div className="w-2 h-2 rounded-full bg-blue-500" />
-                <span className="text-sm font-medium text-blue-700">
-                  {(() => {
-                    const credits = (userData as { usage_credits?: string | number })?.usage_credits;
-                    if (credits === null || credits === undefined) return "Credits: —";
-                    const creditsNum = typeof credits === 'string' ? parseInt(credits, 10) : credits;
-                    return isNaN(creditsNum) ? "Credits: —" : `Credits: ${creditsNum.toLocaleString()}`;
-                  })()}
-                </span>
-              </div>
-              
-              {/* Pricing Link */}
-              <Link href="/pricing">
-                <Button variant="outline" size="sm">
-                  Pricing
-                </Button>
-              </Link>
-              
-              {/* Login Button */}
-              <Button 
-                size="sm" 
-                onClick={() => setIsLoginModalOpen(true)}
-              >
-                Login
-              </Button>
-            </div>
-          </div>
-        </div>
-      </header>
+      {/* Global Header */}
+      <AppHeader currentPage="Dashboard" />
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -175,15 +127,6 @@ export function DashboardClient() {
         </div>
       </main>
 
-      {/* Login Modal */}
-      <LoginModal 
-        isOpen={isLoginModalOpen}
-        onClose={() => setIsLoginModalOpen(false)}
-        onSuccess={() => {
-          // Refresh the page to update auth state
-          window.location.reload();
-        }}
-      />
     </div>
   );
 } 

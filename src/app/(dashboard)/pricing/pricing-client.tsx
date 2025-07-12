@@ -34,6 +34,7 @@ export function PricingPageClient() {
   const { data: prices, isLoading } = clientApi.payments.getStripePrices.useQuery();
   const { data: oneTimeProducts, isLoading: isLoadingOneTime } = clientApi.payments.getOneTimeProducts.useQuery();
   const { data: currentSubscription } = clientApi.payments.getCurrentSubscription.useQuery();
+  const { data: userData } = clientApi.internal.getUserData.useQuery();
 
   // Show success message when redirected from successful checkout
   useEffect(() => {
@@ -105,6 +106,7 @@ export function PricingPageClient() {
             price={price}
             billingInterval={billingInterval}
             currentSubscription={currentSubscription}
+            userData={userData}
           />
         ))}
       </div>
@@ -148,9 +150,10 @@ interface PricingCardProps {
   price: StripePrice;
   billingInterval: BillingInterval;
   currentSubscription?: Subscription | null;
+  userData?: { subscription_plan?: string; UID?: string } | null;
 }
 
-function PricingCard({ price }: PricingCardProps) {
+function PricingCard({ price, userData, currentSubscription }: PricingCardProps) {
   if (!price.unit_amount) {
     return null;
   }
@@ -173,8 +176,23 @@ function PricingCard({ price }: PricingCardProps) {
   // Simple features based on price tier
   const features = getSimpleFeatures(displayPrice);
 
+  // Check if this is the current plan
+  const isCurrentPlan = userData?.subscription_plan === productName || 
+                        (currentSubscription && currentSubscription.status === 'active');
+
   return (
-    <div className="relative rounded-lg border-2 border-gray-200 bg-white p-8">
+    <div className={`relative rounded-lg border-2 p-8 ${
+      isCurrentPlan 
+        ? 'border-green-500 bg-green-50' 
+        : 'border-gray-200 bg-white'
+    }`}>
+      {isCurrentPlan && (
+        <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
+          <div className="bg-green-500 text-white px-3 py-1 rounded-full text-sm font-medium">
+            Current Plan
+          </div>
+        </div>
+      )}
       <div className="text-center mb-6">
         <h3 className="text-xl font-semibold text-gray-900">{productName}</h3>
         <div className="mt-4">

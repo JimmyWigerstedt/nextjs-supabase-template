@@ -19,7 +19,7 @@ import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { toast } from "sonner";
-import Link from "next/link";
+import { AppHeader } from "~/components/layout/AppHeader";
 
 // ==========================================
 // 🔧 TEMPLATE CONFIGURATION
@@ -256,34 +256,21 @@ export function TemplatePageClient() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center space-x-4">
-              <Link href="/dashboard">
-                <Button variant="outline" size="sm">
-                  ← Back to Dashboard
-                </Button>
-              </Link>
-              <h1 className="text-xl font-bold text-gray-900">Order Management Template</h1>
-            </div>
-            
-            {/* Navigation */}
-            <div className="flex items-center space-x-4">
-              {/* Usage Credits Counter */}
-              <div className="flex items-center space-x-2 px-3 py-1 bg-blue-50 rounded-full border">
-                <div className="w-2 h-2 rounded-full bg-blue-500" />
-                <span className="text-sm font-medium text-blue-700">
-                  {(() => {
-                    const credits = (userData as { usage_credits?: string | number })?.usage_credits;
-                    if (credits === null || credits === undefined) return "Credits: —";
-                    const creditsNum = typeof credits === 'string' ? parseInt(credits, 10) : credits;
-                    return isNaN(creditsNum) ? "Credits: —" : `Credits: ${creditsNum.toLocaleString()}`;
-                  })()}
-                </span>
-              </div>
-              
+      {/* Global Header */}
+      <AppHeader 
+        currentPage="Template" 
+        showBackButton={true}
+        backButtonText="← Back to Dashboard"
+        backButtonHref="/dashboard"
+      />
+
+      {/* Main Content */}
+      <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Template Description */}
+        <Card className="mb-8">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle>Order Management Template</CardTitle>
               {/* Connection Status */}
               <div className="flex items-center space-x-2">
                 <div className={`w-3 h-3 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`} />
@@ -292,16 +279,6 @@ export function TemplatePageClient() {
                 </span>
               </div>
             </div>
-          </div>
-        </div>
-      </header>
-
-      {/* Main Content */}
-      <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Template Description */}
-        <Card className="mb-8">
-          <CardHeader>
-            <CardTitle>Order Management Template</CardTitle>
           </CardHeader>
           <CardContent>
             <p className="text-muted-foreground mb-4">

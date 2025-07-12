@@ -1,25 +1,36 @@
 import { Suspense } from 'react';
 import { PricingPageClient } from './pricing-client';
+import { AppHeader } from '~/components/layout/AppHeader';
 
 // Prices are fresh for one hour max
 export const revalidate = 3600;
 
 export default async function PricingPage() {
   return (
-    <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-      <div className="text-center mb-12">
-        <h1 className="text-3xl font-bold text-gray-900 mb-4">
-          Choose Your Plan
-        </h1>
-        <p className="text-xl text-gray-600">
-          Select the perfect plan for your needs
-        </p>
-      </div>
+    <div className="min-h-screen bg-gray-50">
+      {/* Global Header */}
+      <AppHeader 
+        currentPage="Pricing"
+        showBackButton={true}
+        backButtonText="← Back to Dashboard"
+        backButtonHref="/dashboard"
+      />
       
-      <Suspense fallback={<PricingPageSkeleton />}>
-        <PricingPageClient />
-      </Suspense>
-    </main>
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+        <div className="text-center mb-12">
+          <h1 className="text-3xl font-bold text-gray-900 mb-4">
+            Choose Your Plan
+          </h1>
+          <p className="text-xl text-gray-600">
+            Select the perfect plan for your needs
+          </p>
+        </div>
+        
+        <Suspense fallback={<PricingPageSkeleton />}>
+          <PricingPageClient />
+        </Suspense>
+      </main>
+    </div>
   );
 }
 
