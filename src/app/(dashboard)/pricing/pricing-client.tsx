@@ -250,8 +250,13 @@ interface CreditBundleCardProps {
 
 function CreditBundleCard({ product }: CreditBundleCardProps) {
   const [selectedPriceId, setSelectedPriceId] = useState<string>(() => {
-    // Default to first price if available
-    return product.prices.length > 0 ? product.prices[0]!.id : '';
+    // Sort prices by usage_credits (lowest to highest) and default to first
+    const sortedPrices = [...product.prices].sort((a, b) => {
+      const creditsA = parseInt(a.metadata?.usage_credits ?? '0', 10);
+      const creditsB = parseInt(b.metadata?.usage_credits ?? '0', 10);
+      return creditsA - creditsB;
+    });
+    return sortedPrices.length > 0 ? sortedPrices[0]!.id : '';
   });
   const [isLoading, setIsLoading] = useState(false);
 
@@ -291,12 +296,32 @@ function CreditBundleCard({ product }: CreditBundleCardProps) {
     return null;
   }
 
+  // Sort prices by usage_credits (lowest to highest)
+  const sortedPrices = [...product.prices].sort((a, b) => {
+    const creditsA = parseInt(a.metadata?.usage_credits ?? '0', 10);
+    const creditsB = parseInt(b.metadata?.usage_credits ?? '0', 10);
+    return creditsA - creditsB;
+  });
+
   return (
     <div className="relative rounded-lg border-2 border-gray-200 bg-white p-8">
       <div className="text-center mb-6">
         <h3 className="text-xl font-semibold text-gray-900">{product.name}</h3>
         {product.description && (
           <p className="text-gray-600 mt-2">{product.description}</p>
+        )}
+      </div>
+
+      {/* Price Display */}
+      <div className="text-center mb-6">
+        <div className="text-4xl font-bold text-gray-900">${displayPrice}</div>
+        <div className="text-sm text-blue-600 font-medium mt-1">
+          {validCredits > 0 && `${validCredits.toLocaleString()} credits`}
+        </div>
+        {validCredits > 0 && (
+          <div className="text-xs text-gray-500 mt-1">
+            ${(displayPrice / validCredits).toFixed(3)} per credit
+          </div>
         )}
       </div>
 
@@ -312,31 +337,20 @@ function CreditBundleCard({ product }: CreditBundleCardProps) {
             onChange={(e) => setSelectedPriceId(e.target.value)}
             className="w-full appearance-none rounded-md border border-gray-300 bg-white px-4 py-3 pr-8 text-base focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
           >
-            {product.prices.map((price) => {
+            {sortedPrices.map((price) => {
               const priceCredits = parseInt(price.metadata?.usage_credits ?? '0', 10);
               const validPriceCredits = isNaN(priceCredits) ? 0 : priceCredits;
+              const priceAmount = Math.floor((price.unit_amount ?? 0) / 100);
+              const currency = price.currency.toUpperCase();
               return (
                 <option key={price.id} value={price.id}>
-                  {validPriceCredits.toLocaleString()} credits
+                  {currency} {priceAmount} - {validPriceCredits.toLocaleString()} credits
                 </option>
               );
             })}
           </select>
           <ChevronDown className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 pointer-events-none" />
         </div>
-      </div>
-
-      {/* Price Display */}
-      <div className="text-center mb-6">
-        <div className="text-4xl font-bold text-gray-900">${displayPrice}</div>
-        <div className="text-sm text-blue-600 font-medium mt-1">
-          {validCredits > 0 && `${validCredits.toLocaleString()} credits`}
-        </div>
-        {validCredits > 0 && (
-          <div className="text-xs text-gray-500 mt-1">
-            ${(displayPrice / validCredits).toFixed(3)} per credit
-          </div>
-        )}
       </div>
 
       {/* Features */}
