@@ -3,7 +3,8 @@
 import { useState, useEffect } from 'react';
 import { Check, Crown, ChevronDown } from 'lucide-react';
 import { BillingToggle, type BillingInterval } from '~/components/ui/billing-toggle';
-import { SubmitButton } from './submit-button';
+import { Button } from '~/components/ui/button';
+import { ArrowRight, Loader2 } from 'lucide-react';
 import { clientApi } from "~/trpc/react";
 import { toast } from 'sonner';
 import { useSearchParams } from 'next/navigation';
@@ -20,12 +21,7 @@ interface StripePrice {
   metadata: Record<string, string>; // Include price metadata for credit display
 }
 
-interface Subscription {
-  id: string;
-  status: string;
-  current_period_end: number;
-  // Add other subscription properties as needed
-}
+// Removed unused Subscription interface - using local userData instead
 
 export function PricingPageClient() {
   const [billingInterval, setBillingInterval] = useState<BillingInterval>('monthly');
@@ -105,7 +101,6 @@ export function PricingPageClient() {
             key={price.id}
             price={price}
             billingInterval={billingInterval}
-            currentSubscription={currentSubscription}
             userData={userData}
           />
         ))}
@@ -149,18 +144,20 @@ export function PricingPageClient() {
 interface PricingCardProps {
   price: StripePrice;
   billingInterval: BillingInterval;
-  currentSubscription?: Subscription | null;
-  userData?: { subscription_plan?: string; UID?: string } | null;
+  userData?: { 
+    subscription_plan?: string; 
+    subscription_status?: string;
+    UID?: string; 
+  } | null;
 }
 
-function PricingCard({ price, userData, currentSubscription }: PricingCardProps) {
+function PricingCard({ price, userData }: PricingCardProps) {
   if (!price.unit_amount) {
     return null;
   }
 
   const displayPrice = Math.floor(price.unit_amount / 100);
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
-  const productName = price.product?.name ?? 'Unknown Plan';
+  const productName = (price.product as { name?: string })?.name ?? 'Unknown Plan';
   const displayInterval = price.interval ?? 'month';
 
   // Extract usage credits from price metadata (not product metadata)
@@ -176,9 +173,9 @@ function PricingCard({ price, userData, currentSubscription }: PricingCardProps)
   // Simple features based on price tier
   const features = getSimpleFeatures(displayPrice);
 
-  // Check if this is the current plan
-  const isCurrentPlan = userData?.subscription_plan === productName || 
-                        (currentSubscription && currentSubscription.status === 'active');
+  // Check if this is the current plan - only highlight if plan names match exactly
+  const isCurrentPlan = userData?.subscription_status === 'active' && 
+                        userData?.subscription_plan === productName;
 
   return (
     <div className={`relative rounded-lg border-2 p-8 ${
@@ -215,9 +212,68 @@ function PricingCard({ price, userData, currentSubscription }: PricingCardProps)
         ))}
       </ul>
 
-      {/* eslint-disable-next-line @typescript-eslint/no-unsafe-assignment */}
-      <SubmitButton priceId={price.id} planName={productName} />
+      {/* Show subscribe button for all plans - management moved to account dropdown */}
+      <SubscribeButton priceId={price.id} planName={productName} isCurrentPlan={isCurrentPlan} />
     </div>
+  );
+}
+
+// New SubscribeButton component that only handles subscription creation
+function SubscribeButton({ 
+  priceId, 
+  planName,
+  isCurrentPlan 
+}: { 
+  priceId?: string;
+  planName: string;
+  isCurrentPlan: boolean;
+}) {
+  const [isLoading, setIsLoading] = useState(false);
+  
+  const createCheckout = clientApi.payments.createCheckoutSession.useMutation({
+    onSuccess: (data) => {
+      toast.success(`Redirecting to checkout for ${planName}...`);
+      window.location.href = data.url;
+    },
+    onError: (error) => {
+      toast.error(`Failed to create checkout: ${error.message}`);
+      setIsLoading(false);
+    },
+  });
+  
+  const handleClick = async () => {
+    if (!priceId) {
+      toast.error('Price not available');
+      return;
+    }
+
+    setIsLoading(true);
+    
+    try {
+      await createCheckout.mutateAsync({ priceId });
+    } catch (error) {
+      console.error('Checkout error:', error);
+    }
+  };
+  
+  return (
+    <Button 
+      onClick={handleClick} 
+      disabled={isLoading || !priceId || isCurrentPlan}
+      className="w-full"
+      variant={isCurrentPlan ? "outline" : "default"}
+    >
+      {isLoading ? (
+        <Loader2 className="h-4 w-4 animate-spin" />
+      ) : isCurrentPlan ? (
+        "Current Plan"
+      ) : (
+        <>
+          Subscribe
+          <ArrowRight className="h-4 w-4 ml-2" />
+        </>
+      )}
+    </Button>
   );
 }
 

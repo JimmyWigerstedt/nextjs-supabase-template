@@ -37,9 +37,19 @@ export function AppHeader({
   const router = useRouter();
   const utils = clientApi.useUtils();
 
-  // Fetch user data and subscription info
+  // Stripe portal mutation for billing management
+  const createPortal = clientApi.payments.createCustomerPortalSession.useMutation({
+    onSuccess: (data) => {
+      toast.success('Opening billing portal...');
+      window.location.href = data.url;
+    },
+    onError: (error) => {
+      toast.error(`Failed to open billing portal: ${error.message}`);
+    },
+  });
+
+  // Fetch user data (primary source for plan/credits - cached and fast)
   const { data: userData, isLoading: isLoadingUserData } = clientApi.internal.getUserData.useQuery();
-  const { data: currentSubscription, isLoading: isLoadingSubscription } = clientApi.payments.getCurrentSubscription.useQuery();
 
   // Check if user is authenticated
   const isAuthenticated = userData?.UID ? true : false;
@@ -68,14 +78,49 @@ export function AppHeader({
     return isNaN(creditsNum) ? "Credits: —" : `Credits: ${creditsNum.toLocaleString()}`;
   };
 
-  // Get current plan display
+  // Get current plan display - using local database first (cache-first approach)
   const getCurrentPlan = () => {
-    if (isLoadingSubscription) return "Loading...";
-    if (currentSubscription?.status === 'active') {
-      // For active subscriptions, use the local subscription_plan data
-      return userData?.subscription_plan ?? "Pro Plan";
+    if (isLoadingUserData) return "Loading...";
+    
+    const subscriptionStatus = userData?.subscription_status;
+    const planName = userData?.subscription_plan;
+    
+    // Check subscription status from local database
+    if (subscriptionStatus === 'active' && planName) {
+      // Capitalize plan name for display
+      return planName.charAt(0).toUpperCase() + planName.slice(1);
+    } else if (subscriptionStatus === 'past_due') {
+      return "Past Due - Check Billing";
     }
-    return userData?.subscription_plan ?? "Free Plan";
+    
+    // Default to Free Plan if no active subscription
+    return "Free Plan";
+  };
+  
+  // Get plan status styling
+  const getPlanStatusStyling = () => {
+    const subscriptionStatus = userData?.subscription_status;
+    
+    if (subscriptionStatus === 'past_due') {
+      return {
+        containerClass: "bg-red-50 border-red-200",
+        dotClass: "bg-red-500",
+        textClass: "text-red-700"
+      };
+    } else if (subscriptionStatus === 'active') {
+      return {
+        containerClass: "bg-green-50 border-green-200", 
+        dotClass: "bg-green-500",
+        textClass: "text-green-700"
+      };
+    }
+    
+    // Free plan styling
+    return {
+      containerClass: "bg-gray-50 border-gray-200",
+      dotClass: "bg-gray-500", 
+      textClass: "text-gray-700"
+    };
   };
 
   // Navigation links
@@ -129,21 +174,27 @@ export function AppHeader({
           <div className="flex items-center space-x-4">
             {isAuthenticated ? (
               <>
-                {/* Credits display */}
-                <div className="hidden sm:flex items-center space-x-2 px-3 py-1 bg-blue-50 rounded-full border">
-                  <div className="w-2 h-2 rounded-full bg-blue-500" />
-                  <span className="text-sm font-medium text-blue-700">
-                    {formatCredits()}
-                  </span>
-                </div>
+                {/* Credits display - clickable to go to pricing */}
+                <Link href="/pricing">
+                  <div className="hidden sm:flex items-center space-x-2 px-3 py-1 bg-blue-50 rounded-full border cursor-pointer hover:bg-blue-100 transition-colors">
+                    <div className="w-2 h-2 rounded-full bg-blue-500" />
+                    <span className="text-sm font-medium text-blue-700">
+                      {formatCredits()}
+                    </span>
+                  </div>
+                </Link>
 
-                {/* Plan status */}
-                <div className="hidden sm:flex items-center space-x-2 px-3 py-1 bg-green-50 rounded-full border">
-                  <div className="w-2 h-2 rounded-full bg-green-500" />
-                  <span className="text-sm font-medium text-green-700">
-                    {getCurrentPlan()}
-                  </span>
-                </div>
+                {/* Plan status - clickable to go to pricing */}
+                <Link href="/pricing">
+                  <div className={`hidden sm:flex items-center space-x-2 px-3 py-1 rounded-full border cursor-pointer transition-colors ${
+                    getPlanStatusStyling().containerClass
+                  } hover:opacity-80`}>
+                    <div className={`w-2 h-2 rounded-full ${getPlanStatusStyling().dotClass}`} />
+                    <span className={`text-sm font-medium ${getPlanStatusStyling().textClass}`}>
+                      {getCurrentPlan()}
+                    </span>
+                  </div>
+                </Link>
 
                 {/* User menu */}
                 <DropdownMenu>
@@ -161,9 +212,12 @@ export function AppHeader({
                       <Settings className="mr-2 h-4 w-4" />
                       <span>Profile & Settings</span>
                     </DropdownMenuItem>
-                    <DropdownMenuItem>
+                    <DropdownMenuItem 
+                      onClick={() => createPortal.mutate()}
+                      disabled={createPortal.isPending}
+                    >
                       <CreditCard className="mr-2 h-4 w-4" />
-                      <span>Billing & Usage</span>
+                      <span>{createPortal.isPending ? 'Opening...' : 'Plans & Billing'}</span>
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem onClick={handleLogout}>
@@ -222,18 +276,24 @@ export function AppHeader({
               {/* Mobile user info */}
               {isAuthenticated && (
                 <div className="px-3 py-2 space-y-2">
-                  <div className="flex items-center space-x-2 px-3 py-1 bg-blue-50 rounded-full border">
-                    <div className="w-2 h-2 rounded-full bg-blue-500" />
-                    <span className="text-sm font-medium text-blue-700">
-                      {formatCredits()}
-                    </span>
-                  </div>
-                  <div className="flex items-center space-x-2 px-3 py-1 bg-green-50 rounded-full border">
-                    <div className="w-2 h-2 rounded-full bg-green-500" />
-                    <span className="text-sm font-medium text-green-700">
-                      {getCurrentPlan()}
-                    </span>
-                  </div>
+                  <Link href="/pricing" onClick={() => setIsMobileMenuOpen(false)}>
+                    <div className="flex items-center space-x-2 px-3 py-1 bg-blue-50 rounded-full border cursor-pointer hover:bg-blue-100 transition-colors">
+                      <div className="w-2 h-2 rounded-full bg-blue-500" />
+                      <span className="text-sm font-medium text-blue-700">
+                        {formatCredits()}
+                      </span>
+                    </div>
+                  </Link>
+                  <Link href="/pricing" onClick={() => setIsMobileMenuOpen(false)}>
+                    <div className={`flex items-center space-x-2 px-3 py-1 rounded-full border cursor-pointer transition-colors ${
+                      getPlanStatusStyling().containerClass
+                    } hover:opacity-80`}>
+                      <div className={`w-2 h-2 rounded-full ${getPlanStatusStyling().dotClass}`} />
+                      <span className={`text-sm font-medium ${getPlanStatusStyling().textClass}`}>
+                        {getCurrentPlan()}
+                      </span>
+                    </div>
+                  </Link>
                 </div>
               )}
             </div>
