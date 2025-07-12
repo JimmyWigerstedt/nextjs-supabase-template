@@ -137,4 +137,107 @@ export const paymentsRouter = createTRPCRouter({
         metadata: price.metadata, // Include price metadata for credit display
       }));
     }),
+
+  /**
+   * Retrieve one-time purchase products and their prices
+   * 
+   * Implementation notes: Fetches products with type 'one_time' and their associated prices
+   * for credit bundle purchases. Organizes by product with all price variants.
+   * Used by: Pricing page one-time purchase section
+   */
+  getOneTimeProducts: authorizedProcedure
+    .query(async () => {
+      // Get all one-time products (like "Credit Bundle")
+      const products = await stripe.products.list({
+        active: true,
+        type: 'good', // one-time purchases are typically 'good' type
+        limit: 100,
+      });
+
+      // For each product, get all its active prices
+      const productWithPrices = await Promise.all(
+        products.data.map(async (product) => {
+          const prices = await stripe.prices.list({
+            active: true,
+            product: product.id,
+            expand: ['data.product'],
+          });
+
+          // Filter out recurring prices (we only want one-time prices)
+          const oneTimePrices = prices.data.filter(price => !price.recurring);
+
+          return {
+            id: product.id,
+            name: product.name,
+            description: product.description,
+            prices: oneTimePrices.map(price => ({
+              id: price.id,
+              unit_amount: price.unit_amount,
+              currency: price.currency,
+              metadata: price.metadata,
+            }))
+          };
+        })
+      );
+
+      // Filter out products with no one-time prices
+      return productWithPrices.filter(product => product.prices.length > 0);
+    }),
+
+  /**
+   * Create Stripe checkout session for one-time purchase
+   * 
+   * Implementation notes: Creates checkout session with payment mode for one-time purchases.
+   * Embeds user metadata and credit information for webhook processing.
+   * Used by: One-time purchase flows (credit bundles)
+   */
+  createOneTimeCheckoutSession: authorizedProcedure
+    .input(z.object({ priceId: z.string() }))
+    .mutation(async ({ input, ctx }) => {
+      const user = ctx.supabaseUser!;
+      
+      // Ensure we have a Stripe customer
+      const customerId = await subscriptionService.ensureStripeCustomer(user.id, user.email!);
+      
+      // Fetch price to get usage credits from price metadata
+      const price = await stripe.prices.retrieve(input.priceId);
+      
+      // Extract usage credits from price metadata
+      let usageCredits = 0;
+      const creditsMetadata = price.metadata?.usage_credits;
+      if (creditsMetadata) {
+        const credits = parseInt(creditsMetadata, 10);
+        usageCredits = isNaN(credits) ? 0 : credits;
+      }
+      
+      // Create checkout session for one-time payment
+      const session = await stripe.checkout.sessions.create({
+        payment_method_types: ['card'],
+        line_items: [
+          {
+            price: input.priceId,
+            quantity: 1,
+          },
+        ],
+        mode: 'payment', // One-time payment mode
+        success_url: `${env.BASE_URL}/pricing?checkout=success&type=one-time`,
+        cancel_url: `${env.BASE_URL}/pricing`,
+        customer: customerId,
+        client_reference_id: user.id,
+        metadata: {
+          user_id: user.id,
+          purchase_type: 'one-time',
+          usage_credits: usageCredits.toString(),
+        },
+        payment_intent_data: {
+          metadata: {
+            user_id: user.id,
+            purchase_type: 'one-time',
+            usage_credits: usageCredits.toString(),
+          },
+        },
+      });
+
+      return { url: session.url! };
+    }),
 }); 

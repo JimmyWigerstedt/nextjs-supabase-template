@@ -97,11 +97,41 @@ export async function POST(request: NextRequest) {
           }));
         }
         
-        // Extract user ID from invoice subscription metadata
-        const userId = await subscriptionService.extractUserIdFromInvoice(invoice);
-        if (!userId) {
-          console.error('[webhook] No user_id found in invoice');
-          break;
+        // Check if this is a one-time purchase or subscription
+        const invoiceWithSubscription = invoice as Stripe.Invoice & {
+          subscription?: string | Stripe.Subscription;
+        };
+        const isOneTimePurchase = !invoiceWithSubscription.subscription;
+        
+        let userId: string | null = null;
+        let totalCredits = 0;
+        
+        if (isOneTimePurchase) {
+          console.log(`[webhook] Processing one-time purchase invoice ${invoice.id}`);
+          
+          // For one-time purchases, extract user ID from payment intent metadata
+          userId = await subscriptionService.extractUserIdFromOneTimePurchase(invoice);
+          
+          if (!userId) {
+            console.error('[webhook] No user_id found in one-time purchase invoice');
+            break;
+          }
+          
+          // Calculate credits from invoice line items for one-time purchases
+          totalCredits = await subscriptionService.calculateCreditsFromOneTimePurchase(invoice);
+        } else {
+          console.log(`[webhook] Processing subscription invoice ${invoice.id}`);
+          
+          // For subscriptions, use existing logic
+          userId = await subscriptionService.extractUserIdFromInvoice(invoice);
+          
+          if (!userId) {
+            console.error('[webhook] No user_id found in subscription invoice');
+            break;
+          }
+          
+          // Calculate credits from current subscription state
+          totalCredits = await subscriptionService.calculateCreditsFromInvoice(invoice);
         }
         
         // Check idempotency to prevent duplicate processing
@@ -110,15 +140,17 @@ export async function POST(request: NextRequest) {
           break;
         }
         
-        // Calculate credits from current subscription state
-        const totalCredits = await subscriptionService.calculateCreditsFromInvoice(invoice);
-        
         if (totalCredits > 0) {
-          // Allocate credits based on billing reason
-          const billingReason = invoice.billing_reason ?? 'manual';
-          await subscriptionService.handleCreditAllocation(billingReason, userId, totalCredits);
-          
-          console.log(`[webhook] ✅ Allocated ${totalCredits} credits to user ${userId} for invoice ${invoice.id}`);
+          if (isOneTimePurchase) {
+            // For one-time purchases, always ADD credits
+            await subscriptionService.handleCreditAllocation('manual', userId, totalCredits);
+            console.log(`[webhook] ✅ Added ${totalCredits} credits to user ${userId} for one-time purchase ${invoice.id}`);
+          } else {
+            // For subscriptions, use billing reason logic
+            const billingReason = invoice.billing_reason ?? 'manual';
+            await subscriptionService.handleCreditAllocation(billingReason, userId, totalCredits);
+            console.log(`[webhook] ✅ Allocated ${totalCredits} credits to user ${userId} for subscription invoice ${invoice.id}`);
+          }
         } else {
           console.log(`[webhook] No credits found in invoice ${invoice.id} - processing without credit allocation`);
         }

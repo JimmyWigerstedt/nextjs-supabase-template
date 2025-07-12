@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Check, Crown } from 'lucide-react';
+import { Check, Crown, ChevronDown } from 'lucide-react';
 import { BillingToggle, type BillingInterval } from '~/components/ui/billing-toggle';
 import { SubmitButton } from './submit-button';
 import { clientApi } from "~/trpc/react";
@@ -32,16 +32,22 @@ export function PricingPageClient() {
   const searchParams = useSearchParams();
   
   const { data: prices, isLoading } = clientApi.payments.getStripePrices.useQuery();
+  const { data: oneTimeProducts, isLoading: isLoadingOneTime } = clientApi.payments.getOneTimeProducts.useQuery();
   const { data: currentSubscription } = clientApi.payments.getCurrentSubscription.useQuery();
 
   // Show success message when redirected from successful checkout
   useEffect(() => {
     if (searchParams.get('checkout') === 'success') {
-      toast.success('🎉 Payment successful! Your subscription is now active.');
+      const purchaseType = searchParams.get('type');
+      if (purchaseType === 'one-time') {
+        toast.success('🎉 Payment successful! Credits have been added to your account.');
+      } else {
+        toast.success('🎉 Payment successful! Your subscription is now active.');
+      }
     }
   }, [searchParams]);
 
-  if (isLoading) {
+  if (isLoading || isLoadingOneTime) {
     return <PricingPageSkeleton />;
   }
 
@@ -109,6 +115,29 @@ export function PricingPageClient() {
           <p className="text-sm text-green-600 font-medium">
             💰 Save with annual billing
           </p>
+        </div>
+      )}
+
+      {/* Credit Bundle Section */}
+      {oneTimeProducts && oneTimeProducts.length > 0 && (
+        <div className="space-y-6">
+          <div className="text-center">
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">
+              Credit Bundles
+            </h2>
+            <p className="text-gray-600">
+              Purchase credits anytime to top up your account
+            </p>
+          </div>
+          
+          <div className="max-w-md mx-auto">
+            {oneTimeProducts.map((product) => (
+              <CreditBundleCard
+                key={product.id}
+                product={product}
+              />
+            ))}
+          </div>
         </div>
       )}
     </div>
@@ -201,6 +230,141 @@ function getSimpleFeatures(price: number): string[] {
       'White-label options',
     ];
   }
+}
+
+interface OneTimeProduct {
+  id: string;
+  name: string;
+  description: string | null;
+  prices: {
+    id: string;
+    unit_amount: number | null;
+    currency: string;
+    metadata: Record<string, string>;
+  }[];
+}
+
+interface CreditBundleCardProps {
+  product: OneTimeProduct;
+}
+
+function CreditBundleCard({ product }: CreditBundleCardProps) {
+  const [selectedPriceId, setSelectedPriceId] = useState<string>(() => {
+    // Default to first price if available
+    return product.prices.length > 0 ? product.prices[0]!.id : '';
+  });
+  const [isLoading, setIsLoading] = useState(false);
+
+  const createOneTimeCheckout = clientApi.payments.createOneTimeCheckoutSession.useMutation({
+    onSuccess: (data) => {
+      toast.success('Redirecting to checkout...');
+      window.location.href = data.url;
+    },
+    onError: (error) => {
+      toast.error(`Failed to create checkout: ${error.message}`);
+      setIsLoading(false);
+    },
+  });
+
+  const selectedPrice = product.prices.find(p => p.id === selectedPriceId);
+  const displayPrice = selectedPrice ? Math.floor((selectedPrice.unit_amount ?? 0) / 100) : 0;
+  const credits = selectedPrice ? parseInt(selectedPrice.metadata?.usage_credits ?? '0', 10) : 0;
+  const validCredits = isNaN(credits) ? 0 : credits;
+
+  const handlePurchase = async () => {
+    if (!selectedPriceId) {
+      toast.error('Please select a credit bundle');
+      return;
+    }
+    
+    setIsLoading(true);
+    
+    try {
+      await createOneTimeCheckout.mutateAsync({ priceId: selectedPriceId });
+    } catch (error) {
+      // Error handling is done in the mutation callbacks
+      console.error('Credit bundle purchase error:', error);
+    }
+  };
+
+  if (product.prices.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="relative rounded-lg border-2 border-gray-200 bg-white p-8">
+      <div className="text-center mb-6">
+        <h3 className="text-xl font-semibold text-gray-900">{product.name}</h3>
+        {product.description && (
+          <p className="text-gray-600 mt-2">{product.description}</p>
+        )}
+      </div>
+
+      {/* Price Selection Dropdown */}
+      <div className="mb-6">
+        <label htmlFor="price-select" className="block text-sm font-medium text-gray-700 mb-2">
+          Choose your credit bundle:
+        </label>
+        <div className="relative">
+          <select
+            id="price-select"
+            value={selectedPriceId}
+            onChange={(e) => setSelectedPriceId(e.target.value)}
+            className="w-full appearance-none rounded-md border border-gray-300 bg-white px-4 py-3 pr-8 text-base focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+          >
+            {product.prices.map((price) => {
+              const priceCredits = parseInt(price.metadata?.usage_credits ?? '0', 10);
+              const validPriceCredits = isNaN(priceCredits) ? 0 : priceCredits;
+              return (
+                <option key={price.id} value={price.id}>
+                  {validPriceCredits.toLocaleString()} credits
+                </option>
+              );
+            })}
+          </select>
+          <ChevronDown className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 pointer-events-none" />
+        </div>
+      </div>
+
+      {/* Price Display */}
+      <div className="text-center mb-6">
+        <div className="text-4xl font-bold text-gray-900">${displayPrice}</div>
+        <div className="text-sm text-blue-600 font-medium mt-1">
+          {validCredits > 0 && `${validCredits.toLocaleString()} credits`}
+        </div>
+        {validCredits > 0 && (
+          <div className="text-xs text-gray-500 mt-1">
+            ${(displayPrice / validCredits).toFixed(3)} per credit
+          </div>
+        )}
+      </div>
+
+      {/* Features */}
+      <ul className="space-y-3 mb-8">
+        <li className="flex items-start space-x-3">
+          <Check className="h-5 w-5 text-green-500 flex-shrink-0 mt-0.5" />
+          <span className="text-sm text-gray-700">Credits never expire</span>
+        </li>
+        <li className="flex items-start space-x-3">
+          <Check className="h-5 w-5 text-green-500 flex-shrink-0 mt-0.5" />
+          <span className="text-sm text-gray-700">Instant account top-up</span>
+        </li>
+        <li className="flex items-start space-x-3">
+          <Check className="h-5 w-5 text-green-500 flex-shrink-0 mt-0.5" />
+          <span className="text-sm text-gray-700">No subscription required</span>
+        </li>
+      </ul>
+
+      {/* Purchase Button */}
+      <button
+        onClick={handlePurchase}
+        disabled={isLoading || !selectedPriceId}
+        className="w-full bg-blue-600 text-white py-3 px-4 rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+      >
+        {isLoading ? 'Processing...' : 'Buy Credits'}
+      </button>
+    </div>
+  );
 }
 
 function PricingPageSkeleton() {

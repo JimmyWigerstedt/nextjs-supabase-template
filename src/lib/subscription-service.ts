@@ -477,6 +477,127 @@ export class SubscriptionService {
       return null;
     }
   }
+
+  /**
+   * Extract user ID from one-time purchase invoice using payment intent metadata
+   * 
+   * Implementation notes: For one-time purchases, user_id is stored in payment_intent metadata
+   * since there's no subscription associated with the invoice.
+   * Used by: One-time purchase webhook processing
+   */
+  async extractUserIdFromOneTimePurchase(invoice: Stripe.Invoice): Promise<string | null> {
+    try {
+      console.log(`[credits] Extracting user_id from one-time purchase invoice ${invoice.id}`);
+      
+      // For one-time purchases, check payment intent metadata
+      const invoiceWithPaymentIntent = invoice as Stripe.Invoice & {
+        payment_intent?: string | Stripe.PaymentIntent;
+      };
+      
+      if (invoiceWithPaymentIntent.payment_intent) {
+        let paymentIntentId: string;
+        
+        if (typeof invoiceWithPaymentIntent.payment_intent === 'string') {
+          paymentIntentId = invoiceWithPaymentIntent.payment_intent;
+        } else {
+          paymentIntentId = invoiceWithPaymentIntent.payment_intent.id;
+        }
+        
+        console.log(`[credits] Fetching payment intent ${paymentIntentId} for user_id`);
+        
+        const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+        const userId = paymentIntent.metadata?.user_id;
+        
+        if (userId) {
+          console.log(`[credits] Found user_id in payment intent metadata: ${userId}`);
+          return userId;
+        }
+      }
+      
+      // Fallback: Check invoice metadata directly
+      if (invoice.metadata?.user_id) {
+        console.log(`[credits] Found user_id in invoice metadata: ${invoice.metadata.user_id}`);
+        return invoice.metadata.user_id;
+      }
+      
+      // Fallback: Check line item metadata
+      for (const lineItem of invoice.lines.data) {
+        if (lineItem.metadata?.user_id) {
+          console.log(`[credits] Found user_id in line item metadata: ${lineItem.metadata.user_id}`);
+          return lineItem.metadata.user_id;
+        }
+      }
+      
+      console.error(`[credits] No user_id found in one-time purchase invoice ${invoice.id}`);
+      return null;
+    } catch (error) {
+      console.error(`[credits] Error extracting user ID from one-time purchase invoice ${invoice.id}:`, error);
+      return null;
+    }
+  }
+
+  /**
+   * Calculate credits from one-time purchase invoice using line item price metadata
+   * 
+   * Implementation notes: For one-time purchases, credits are calculated from the price
+   * metadata of the line items directly since there's no subscription to query.
+   * Used by: One-time purchase webhook processing
+   */
+  async calculateCreditsFromOneTimePurchase(invoice: Stripe.Invoice): Promise<number> {
+    try {
+      console.log(`[credits] Calculating credits from one-time purchase invoice ${invoice.id}`);
+      
+      let totalCredits = 0;
+      
+      // Process each line item to get credits from price metadata
+      for (const lineItem of invoice.lines.data) {
+        // Access price from line item (cast to include price property)
+        const lineItemWithPrice = lineItem as Stripe.InvoiceLineItem & {
+          price?: string | Stripe.Price;
+        };
+        
+        let priceId: string | null = null;
+        
+        if (lineItemWithPrice.price) {
+          priceId = typeof lineItemWithPrice.price === 'string' 
+            ? lineItemWithPrice.price 
+            : lineItemWithPrice.price.id;
+        }
+        
+        if (priceId) {
+          console.log(`[credits] Processing line item with price ID ${priceId}`);
+          
+          // Fetch price to get metadata
+          const price = await stripe.prices.retrieve(priceId);
+          const usageCreditsStr = price.metadata?.usage_credits;
+          
+          if (!usageCreditsStr) {
+            console.log(`[credits] Price ${price.id} has no usage_credits metadata, skipping`);
+            continue;
+          }
+          
+          const itemCredits = parseInt(usageCreditsStr, 10);
+          if (isNaN(itemCredits) || itemCredits <= 0) {
+            console.log(`[credits] Price ${price.id} has invalid usage_credits metadata: ${usageCreditsStr}`);
+            continue;
+          }
+          
+          // Multiply by quantity
+          const quantity = lineItem.quantity ?? 1;
+          const lineCredits = itemCredits * quantity;
+          totalCredits += lineCredits;
+          
+          console.log(`[credits] Price ${price.id}: ${itemCredits} credits x ${quantity} = ${lineCredits} credits`);
+        }
+      }
+      
+      console.log(`[credits] Total credits from one-time purchase: ${totalCredits}`);
+      return totalCredits;
+    } catch (error) {
+      console.error(`[credits] Error calculating credits from one-time purchase invoice ${invoice.id}:`, error);
+      return 0;
+    }
+  }
 }
 
 // Export a singleton instance
