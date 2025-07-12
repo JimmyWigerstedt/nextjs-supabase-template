@@ -173,9 +173,9 @@ function PricingCard({ price, userData }: PricingCardProps) {
   // Simple features based on price tier
   const features = getSimpleFeatures(displayPrice);
 
-  // Check if this is the current plan - only highlight if plan names match exactly
+  // Check if this is the current plan - compare case-insensitively since DB stores lowercase
   const isCurrentPlan = userData?.subscription_status === 'active' && 
-                        userData?.subscription_plan === productName;
+                        userData?.subscription_plan === productName.toLowerCase();
 
   return (
     <div className={`relative rounded-lg border-2 p-8 ${
