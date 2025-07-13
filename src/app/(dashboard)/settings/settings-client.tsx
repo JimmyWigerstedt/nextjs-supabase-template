@@ -6,21 +6,11 @@ import { Button } from "~/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "~/components/ui/form";
 import { AuthErrorBoundary } from "~/components/ui/auth-error-boundary";
 import { ErrorBoundary } from "~/components/ui/error-boundary";
-import { CardSkeleton, TextLinesSkeleton } from "~/components/ui/skeleton";
+import { TextLinesSkeleton } from "~/components/ui/skeleton";
 import { clientApi } from "~/trpc/react";
 import { toast } from "sonner";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
-
-const profileSchema = z.object({
-  email: z.string().email().optional(),
-});
-
-type ProfileFormType = z.infer<typeof profileSchema>;
 
 export function SettingsClient() {
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
@@ -68,23 +58,8 @@ export function SettingsClient() {
     },
   });
 
-  // Form for profile editing
-  const form = useForm<ProfileFormType>({
-    resolver: zodResolver(profileSchema),
-    defaultValues: {
-      email: userData?.email || "",
-    },
-  });
-
   // Check if user is authenticated
   const isAuthenticated = !!userData?.UID;
-
-  // Handle profile form submission
-  const onSubmit = async (data: ProfileFormType) => {
-    if (data.email && data.email !== userData?.email) {
-      updateUserData.mutate({ email: data.email });
-    }
-  };
 
   // Handle account deletion
   const handleDeleteAccount = async () => {
@@ -164,7 +139,7 @@ export function SettingsClient() {
                       <Mail className="h-4 w-4" />
                       <span>Email Address</span>
                     </Label>
-                    <p className="text-gray-900 font-medium">{userData?.email || "Not provided"}</p>
+                                         <p className="text-gray-900 font-medium">{userData?.email ?? "Not provided"}</p>
                   </div>
                   
                   <div className="space-y-2">
@@ -182,9 +157,9 @@ export function SettingsClient() {
                   
                   <div className="space-y-2">
                     <Label>Available Credits</Label>
-                    <p className="text-gray-900 font-medium">
-                      {userData?.usage_credits ? parseInt(userData.usage_credits as string, 10).toLocaleString() : "0"}
-                    </p>
+                                         <p className="text-gray-900 font-medium">
+                       {userData?.usage_credits ? parseInt(String(userData.usage_credits), 10).toLocaleString() : "0"}
+                     </p>
                   </div>
                 </div>
               )}
@@ -283,7 +258,7 @@ export function SettingsClient() {
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="space-y-2">
-                    <Label>Type "DELETE" to confirm</Label>
+                    <Label>Type &quot;DELETE&quot; to confirm</Label>
                     <Input
                       value={deleteConfirmText}
                       onChange={(e) => setDeleteConfirmText(e.target.value)}
