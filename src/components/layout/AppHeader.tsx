@@ -74,9 +74,9 @@ export function AppHeader({
   const formatCredits = () => {
     if (isLoadingUserData) return "Loading...";
     const credits = userData?.usage_credits;
-    if (credits === null || credits === undefined) return "Credits: —";
+    if (credits === null || credits === undefined) return "Total Credits: —";
     const creditsNum = typeof credits === 'string' ? parseInt(credits, 10) : credits;
-    return isNaN(creditsNum) ? "Credits: —" : `Credits: ${creditsNum.toLocaleString()}`;
+    return isNaN(creditsNum) ? "Total Credits: —" : `Total Credits: ${creditsNum.toLocaleString()}`;
   };
 
   // Get current plan display - using local database first (cache-first approach)

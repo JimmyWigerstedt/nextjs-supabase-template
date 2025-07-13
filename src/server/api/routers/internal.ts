@@ -10,6 +10,13 @@
 // - getUserData: Returns all user fields dynamically  
 // - sendToN8n: Forwards any fields to n8n workflows
 // - All SQL operations handle field names dynamically
+//
+// CREDITS SYSTEM:
+// - usage_credits are ADDITIVE and NEVER EXPIRE
+// - At signup: Add initial credits
+// - At subscription renewal: Add credits (don't replace)
+// - One-time bundles: Add credits to existing total
+// - Credits accumulate over time and persist indefinitely
 // ==========================================
 
 import { z } from "zod";

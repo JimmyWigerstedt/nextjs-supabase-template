@@ -99,6 +99,20 @@ export function SettingsClient() {
     }
   };
 
+  // Get plan name from subscription or userData
+  const getPlanName = () => {
+    if (isLoadingSubscription || isLoadingUserData) return "Loading...";
+    
+    // Try to get plan from userData first (more reliable)
+    if (userData?.subscription_plan) {
+      return userData.subscription_plan.charAt(0).toUpperCase() + userData.subscription_plan.slice(1);
+    }
+    
+    return "Free Plan";
+  };
+
+
+
   return (
     <ErrorBoundary>
       <AuthErrorBoundary
@@ -155,12 +169,13 @@ export function SettingsClient() {
                     <p className="text-gray-600 font-mono text-sm">{userData?.UID}</p>
                   </div>
                   
-                  <div className="space-y-2">
-                    <Label>Available Credits</Label>
-                                         <p className="text-gray-900 font-medium">
+                                     <div className="space-y-2">
+                     <Label>Total Credits</Label>
+                     <p className="text-gray-900 font-medium">
                        {userData?.usage_credits ? parseInt(String(userData.usage_credits), 10).toLocaleString() : "0"}
                      </p>
-                  </div>
+                     <p className="text-xs text-gray-500">Credits never expire and are cumulative</p>
+                   </div>
                 </div>
               )}
             </CardContent>
@@ -181,23 +196,31 @@ export function SettingsClient() {
               {isLoadingSubscription ? (
                 <TextLinesSkeleton lines={2} />
               ) : (
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <Label>Current Plan</Label>
-                      <p className="text-gray-900 font-medium">{getSubscriptionStatus()}</p>
-                    </div>
-                    {currentSubscription && (
-                      <Button
-                        onClick={() => createPortal.mutate()}
-                        disabled={createPortal.isPending}
-                        className="flex items-center space-x-2"
-                      >
-                        <CreditCard className="h-4 w-4" />
-                        <span>{createPortal.isPending ? 'Opening...' : 'Manage Subscription'}</span>
-                      </Button>
-                    )}
-                  </div>
+                                 <div className="space-y-4">
+                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                     <div className="space-y-2">
+                       <Label>Current Plan</Label>
+                       <p className="text-gray-900 font-medium">{getPlanName()}</p>
+                     </div>
+                     
+                     <div className="space-y-2">
+                       <Label>Status</Label>
+                       <p className="text-gray-900 font-medium">{getSubscriptionStatus()}</p>
+                     </div>
+                   </div>
+                   
+                   {currentSubscription && (
+                     <div className="flex justify-end pt-4">
+                       <Button
+                         onClick={() => createPortal.mutate()}
+                         disabled={createPortal.isPending}
+                         className="flex items-center space-x-2"
+                       >
+                         <CreditCard className="h-4 w-4" />
+                         <span>{createPortal.isPending ? 'Opening...' : 'Manage Subscription'}</span>
+                       </Button>
+                     </div>
+                   )}
                   
                   {!currentSubscription && (
                     <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">

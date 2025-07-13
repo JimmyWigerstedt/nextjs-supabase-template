@@ -61,32 +61,7 @@ export function PricingPageClient() {
 
   return (
     <div className="space-y-8">
-      {/* Current Subscription Status */}
-      {currentSubscription && (
-        <div className={`rounded-lg border-2 p-6 text-center ${
-          currentSubscription.status === 'past_due' 
-            ? 'border-yellow-500 bg-yellow-50' 
-            : 'border-green-500 bg-green-50'
-        }`}>
-          <div className="flex items-center justify-center space-x-2">
-            <Crown className={`h-5 w-5 ${
-              currentSubscription.status === 'past_due' ? 'text-yellow-600' : 'text-green-600'
-            }`} />
-            <span className={`font-semibold ${
-              currentSubscription.status === 'past_due' ? 'text-yellow-800' : 'text-green-800'
-            }`}>
-              {currentSubscription.status === 'past_due' 
-                ? 'Payment issue - update payment' 
-                : 'You have an active subscription'}
-            </span>
-          </div>
-          <p className={`text-sm mt-2 ${
-            currentSubscription.status === 'past_due' ? 'text-yellow-700' : 'text-green-700'
-          }`}>
-            Use the &quot;Manage Subscription&quot; button to make changes
-          </p>
-        </div>
-      )}
+
 
       {/* Billing Toggle */}
       <div className="flex justify-center">
@@ -104,6 +79,7 @@ export function PricingPageClient() {
             price={price}
             billingInterval={billingInterval}
             userData={userData}
+            currentSubscription={currentSubscription}
           />
         ))}
       </div>
@@ -152,9 +128,12 @@ interface PricingCardProps {
     subscription_status?: string;
     UID?: string; 
   } | null;
+  currentSubscription?: {
+    status: string;
+  } | null;
 }
 
-function PricingCard({ price, userData }: PricingCardProps) {
+function PricingCard({ price, userData, currentSubscription }: PricingCardProps) {
   if (!price.unit_amount) {
     return null;
   }
@@ -221,6 +200,7 @@ function PricingCard({ price, userData }: PricingCardProps) {
         planName={productName} 
         isCurrentPlan={isCurrentPlan} 
         isAuthenticated={!!userData?.UID}
+        hasActiveSubscription={!!currentSubscription && currentSubscription.status === 'active'}
       />
     </div>
   );
@@ -231,12 +211,14 @@ function SubscribeButton({
   priceId, 
   planName,
   isCurrentPlan,
-  isAuthenticated
+  isAuthenticated,
+  hasActiveSubscription
 }: { 
   priceId?: string;
   planName: string;
   isCurrentPlan: boolean;
   isAuthenticated: boolean;
+  hasActiveSubscription: boolean;
 }) {
   const [isLoading, setIsLoading] = useState(false);
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
@@ -248,6 +230,17 @@ function SubscribeButton({
     },
     onError: (error) => {
       toast.error(`Failed to create checkout: ${error.message}`);
+      setIsLoading(false);
+    },
+  });
+
+  const createPortal = clientApi.payments.createCustomerPortalSession.useMutation({
+    onSuccess: (data) => {
+      toast.success('Opening billing portal to manage subscription...');
+      window.location.href = data.url;
+    },
+    onError: (error) => {
+      toast.error(`Failed to open billing portal: ${error.message}`);
       setIsLoading(false);
     },
   });
@@ -267,9 +260,15 @@ function SubscribeButton({
     setIsLoading(true);
     
     try {
-      await createCheckout.mutateAsync({ priceId });
+      // If user has active subscription and this is not their current plan, open portal
+      if (hasActiveSubscription && !isCurrentPlan) {
+        await createPortal.mutateAsync();
+      } else {
+        // Otherwise, create new checkout session
+        await createCheckout.mutateAsync({ priceId });
+      }
     } catch (error) {
-      console.error('Checkout error:', error);
+      console.error('Subscription action error:', error);
     }
   };
   
@@ -287,6 +286,8 @@ function SubscribeButton({
           "Current Plan"
         ) : !isAuthenticated ? (
           "Login to Subscribe"
+        ) : hasActiveSubscription ? (
+          "Manage Subscription"
         ) : (
           <>
             Subscribe
