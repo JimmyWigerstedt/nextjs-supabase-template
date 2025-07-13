@@ -10,6 +10,13 @@
 // - getUserData: Returns all user fields dynamically  
 // - sendToN8n: Forwards any fields to n8n workflows
 // - All SQL operations handle field names dynamically
+//
+// CREDITS SYSTEM:
+// - usage_credits are ADDITIVE and NEVER EXPIRE
+// - At signup: Add initial credits
+// - At subscription renewal: Add credits (don't replace)
+// - One-time bundles: Add credits to existing total
+// - Credits accumulate over time and persist indefinitely
 // ==========================================
 
 import { z } from "zod";
@@ -271,12 +278,17 @@ export const internalRouter = createTRPCRouter({
   initializeUserData: authorizedProcedure.mutation(async ({ ctx }) => {
     const client = await internalDb.connect();
     try {
+      // Get user email from Supabase auth
+      const userEmail = ctx.supabaseUser!.email;
+      
       const result = await client.query(
-        `INSERT INTO "${env.NC_SCHEMA}"."userData" ("UID") 
-         VALUES ($1)
-         ON CONFLICT ("UID") DO NOTHING
+        `INSERT INTO "${env.NC_SCHEMA}"."userData" ("UID", "email") 
+         VALUES ($1, $2)
+         ON CONFLICT ("UID") DO UPDATE SET 
+           "email" = COALESCE(EXCLUDED."email", "${env.NC_SCHEMA}"."userData"."email"),
+           "updated_at" = CURRENT_TIMESTAMP
          RETURNING *`,
-        [ctx.supabaseUser!.id]
+        [ctx.supabaseUser!.id, userEmail]
       );
       
       if (result.rows.length === 0) {
@@ -294,6 +306,35 @@ export const internalRouter = createTRPCRouter({
     } catch (error) {
       console.error('Failed to initialize user data:', error);
       throw new Error('Failed to initialize user data');
+    } finally {
+      client.release();
+    }
+  }),
+
+  deleteAccount: authorizedProcedure.mutation(async ({ ctx }) => {
+    const client = await internalDb.connect();
+    try {
+      console.log(`[deleteAccount] Deleting account for user ${ctx.supabaseUser!.id}`);
+      
+      // Delete user data from internal database
+      const result = await client.query(
+        `DELETE FROM "${env.NC_SCHEMA}"."userData" WHERE "UID" = $1 RETURNING *`,
+        [ctx.supabaseUser!.id]
+      );
+      
+      console.log(`[deleteAccount] Deleted ${result.rowCount} row(s) for user ${ctx.supabaseUser!.id}`);
+      
+      // Note: This only deletes from internal database
+      // Supabase user deletion would need to be handled separately
+      // and typically requires admin privileges
+      
+      return {
+        success: true,
+        message: "Account data deleted successfully from internal database",
+      };
+    } catch (error) {
+      console.error(`[deleteAccount] Failed to delete account for ${ctx.supabaseUser!.id}:`, error);
+      throw new Error('Failed to delete account data');
     } finally {
       client.release();
     }

@@ -6,7 +6,8 @@ import { useRouter } from "next/navigation";
 import { User, LogOut, Settings, CreditCard, Menu, X, ChevronDown } from "lucide-react";
 
 import { Button } from "~/components/ui/button";
-import { LoginModal } from "~/components/ui/login-modal";
+import { AuthModal } from "~/components/ui/login-modal";
+import { UserDataSkeleton } from "~/components/ui/skeleton";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -73,9 +74,9 @@ export function AppHeader({
   const formatCredits = () => {
     if (isLoadingUserData) return "Loading...";
     const credits = userData?.usage_credits;
-    if (credits === null || credits === undefined) return "Credits: —";
+    if (credits === null || credits === undefined) return "Total Credits: —";
     const creditsNum = typeof credits === 'string' ? parseInt(credits, 10) : credits;
-    return isNaN(creditsNum) ? "Credits: —" : `Credits: ${creditsNum.toLocaleString()}`;
+    return isNaN(creditsNum) ? "Total Credits: —" : `Total Credits: ${creditsNum.toLocaleString()}`;
   };
 
   // Get current plan display - using local database first (cache-first approach)
@@ -172,7 +173,10 @@ export function AppHeader({
 
           {/* Right side - User info and menu */}
           <div className="flex items-center space-x-4">
-            {isAuthenticated ? (
+            {isLoadingUserData ? (
+              /* Show skeleton while loading */
+              <UserDataSkeleton />
+            ) : isAuthenticated ? (
               <>
                 {/* Credits display - clickable to go to pricing */}
                 <Link href="/pricing">
@@ -207,10 +211,17 @@ export function AppHeader({
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-56">
                     <DropdownMenuLabel>My Account</DropdownMenuLabel>
+                    {userData?.email && (
+                      <div className="px-2 py-1">
+                        <p className="text-sm text-gray-600">{userData.email}</p>
+                      </div>
+                    )}
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem>
-                      <Settings className="mr-2 h-4 w-4" />
-                      <span>Profile & Settings</span>
+                    <DropdownMenuItem asChild>
+                      <Link href="/settings">
+                        <Settings className="mr-2 h-4 w-4" />
+                        <span>Profile & Settings</span>
+                      </Link>
                     </DropdownMenuItem>
                     <DropdownMenuItem 
                       onClick={() => createPortal.mutate()}
@@ -301,8 +312,8 @@ export function AppHeader({
         )}
       </div>
 
-      {/* Login Modal */}
-      <LoginModal
+      {/* Auth Modal */}
+      <AuthModal
         isOpen={isLoginModalOpen}
         onClose={() => setIsLoginModalOpen(false)}
         onSuccess={() => {

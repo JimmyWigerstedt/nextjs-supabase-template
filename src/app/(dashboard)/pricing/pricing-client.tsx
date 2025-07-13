@@ -8,6 +8,8 @@ import { ArrowRight, Loader2 } from 'lucide-react';
 import { clientApi } from "~/trpc/react";
 import { toast } from 'sonner';
 import { useSearchParams } from 'next/navigation';
+import { AuthModal } from "~/components/ui/login-modal";
+import { PricingCardSkeleton } from "~/components/ui/skeleton";
 
 // Type definitions for better TypeScript support
 interface StripePrice {
@@ -59,32 +61,7 @@ export function PricingPageClient() {
 
   return (
     <div className="space-y-8">
-      {/* Current Subscription Status */}
-      {currentSubscription && (
-        <div className={`rounded-lg border-2 p-6 text-center ${
-          currentSubscription.status === 'past_due' 
-            ? 'border-yellow-500 bg-yellow-50' 
-            : 'border-green-500 bg-green-50'
-        }`}>
-          <div className="flex items-center justify-center space-x-2">
-            <Crown className={`h-5 w-5 ${
-              currentSubscription.status === 'past_due' ? 'text-yellow-600' : 'text-green-600'
-            }`} />
-            <span className={`font-semibold ${
-              currentSubscription.status === 'past_due' ? 'text-yellow-800' : 'text-green-800'
-            }`}>
-              {currentSubscription.status === 'past_due' 
-                ? 'Payment issue - update payment' 
-                : 'You have an active subscription'}
-            </span>
-          </div>
-          <p className={`text-sm mt-2 ${
-            currentSubscription.status === 'past_due' ? 'text-yellow-700' : 'text-green-700'
-          }`}>
-            Use the &quot;Manage Subscription&quot; button to make changes
-          </p>
-        </div>
-      )}
+
 
       {/* Billing Toggle */}
       <div className="flex justify-center">
@@ -102,6 +79,7 @@ export function PricingPageClient() {
             price={price}
             billingInterval={billingInterval}
             userData={userData}
+            currentSubscription={currentSubscription}
           />
         ))}
       </div>
@@ -132,6 +110,7 @@ export function PricingPageClient() {
               <CreditBundleCard
                 key={product.id}
                 product={product}
+                isAuthenticated={!!userData?.UID}
               />
             ))}
           </div>
@@ -149,9 +128,12 @@ interface PricingCardProps {
     subscription_status?: string;
     UID?: string; 
   } | null;
+  currentSubscription?: {
+    status: string;
+  } | null;
 }
 
-function PricingCard({ price, userData }: PricingCardProps) {
+function PricingCard({ price, userData, currentSubscription }: PricingCardProps) {
   if (!price.unit_amount) {
     return null;
   }
@@ -213,7 +195,13 @@ function PricingCard({ price, userData }: PricingCardProps) {
       </ul>
 
       {/* Show subscribe button for all plans - management moved to account dropdown */}
-      <SubscribeButton priceId={price.id} planName={productName} isCurrentPlan={isCurrentPlan} />
+      <SubscribeButton 
+        priceId={price.id} 
+        planName={productName} 
+        isCurrentPlan={isCurrentPlan} 
+        isAuthenticated={!!userData?.UID}
+        hasActiveSubscription={!!currentSubscription && currentSubscription.status === 'active'}
+      />
     </div>
   );
 }
@@ -222,13 +210,18 @@ function PricingCard({ price, userData }: PricingCardProps) {
 function SubscribeButton({ 
   priceId, 
   planName,
-  isCurrentPlan 
+  isCurrentPlan,
+  isAuthenticated,
+  hasActiveSubscription
 }: { 
   priceId?: string;
   planName: string;
   isCurrentPlan: boolean;
+  isAuthenticated: boolean;
+  hasActiveSubscription: boolean;
 }) {
   const [isLoading, setIsLoading] = useState(false);
+  const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   
   const createCheckout = clientApi.payments.createCheckoutSession.useMutation({
     onSuccess: (data) => {
@@ -240,6 +233,17 @@ function SubscribeButton({
       setIsLoading(false);
     },
   });
+
+  const createPortal = clientApi.payments.createCustomerPortalSession.useMutation({
+    onSuccess: (data) => {
+      toast.success('Opening billing portal to manage subscription...');
+      window.location.href = data.url;
+    },
+    onError: (error) => {
+      toast.error(`Failed to open billing portal: ${error.message}`);
+      setIsLoading(false);
+    },
+  });
   
   const handleClick = async () => {
     if (!priceId) {
@@ -247,33 +251,62 @@ function SubscribeButton({
       return;
     }
 
+    // If user is not authenticated, show login modal
+    if (!isAuthenticated) {
+      setIsLoginModalOpen(true);
+      return;
+    }
+
     setIsLoading(true);
     
     try {
-      await createCheckout.mutateAsync({ priceId });
+      // If user has active subscription and this is not their current plan, open portal
+      if (hasActiveSubscription && !isCurrentPlan) {
+        await createPortal.mutateAsync();
+      } else {
+        // Otherwise, create new checkout session
+        await createCheckout.mutateAsync({ priceId });
+      }
     } catch (error) {
-      console.error('Checkout error:', error);
+      console.error('Subscription action error:', error);
     }
   };
   
   return (
-    <Button 
-      onClick={handleClick} 
-      disabled={isLoading || !priceId || isCurrentPlan}
-      className="w-full"
-      variant={isCurrentPlan ? "outline" : "default"}
-    >
-      {isLoading ? (
-        <Loader2 className="h-4 w-4 animate-spin" />
-      ) : isCurrentPlan ? (
-        "Current Plan"
-      ) : (
-        <>
-          Subscribe
-          <ArrowRight className="h-4 w-4 ml-2" />
-        </>
-      )}
-    </Button>
+    <>
+      <Button 
+        onClick={handleClick} 
+        disabled={isLoading || !priceId || isCurrentPlan}
+        className="w-full"
+        variant={isCurrentPlan ? "outline" : "default"}
+      >
+        {isLoading ? (
+          <Loader2 className="h-4 w-4 animate-spin" />
+        ) : isCurrentPlan ? (
+          "Current Plan"
+        ) : !isAuthenticated ? (
+          "Login to Subscribe"
+        ) : hasActiveSubscription ? (
+          "Manage Subscription"
+        ) : (
+          <>
+            Subscribe
+            <ArrowRight className="h-4 w-4 ml-2" />
+          </>
+        )}
+      </Button>
+      
+      {/* Auth Modal */}
+      <AuthModal
+        isOpen={isLoginModalOpen}
+        onClose={() => setIsLoginModalOpen(false)}
+        onSuccess={() => {
+          setIsLoginModalOpen(false);
+          // Refresh page to update auth state
+          window.location.reload();
+        }}
+      />
+    </>
   );
 }
 
@@ -320,9 +353,10 @@ interface OneTimeProduct {
 
 interface CreditBundleCardProps {
   product: OneTimeProduct;
+  isAuthenticated: boolean;
 }
 
-function CreditBundleCard({ product }: CreditBundleCardProps) {
+function CreditBundleCard({ product, isAuthenticated }: CreditBundleCardProps) {
   const [selectedPriceId, setSelectedPriceId] = useState<string>(() => {
     // Sort prices by usage_credits (lowest to highest) and default to first
     const sortedPrices = [...product.prices].sort((a, b) => {
@@ -333,6 +367,7 @@ function CreditBundleCard({ product }: CreditBundleCardProps) {
     return sortedPrices.length > 0 ? sortedPrices[0]!.id : '';
   });
   const [isLoading, setIsLoading] = useState(false);
+  const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
 
   const createOneTimeCheckout = clientApi.payments.createOneTimeCheckoutSession.useMutation({
     onSuccess: (data) => {
@@ -353,6 +388,12 @@ function CreditBundleCard({ product }: CreditBundleCardProps) {
   const handlePurchase = async () => {
     if (!selectedPriceId) {
       toast.error('Please select a credit bundle');
+      return;
+    }
+
+    // If user is not authenticated, show login modal
+    if (!isAuthenticated) {
+      setIsLoginModalOpen(true);
       return;
     }
     
@@ -449,8 +490,19 @@ function CreditBundleCard({ product }: CreditBundleCardProps) {
         disabled={isLoading || !selectedPriceId}
         className="w-full bg-blue-600 text-white py-3 px-4 rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
       >
-        {isLoading ? 'Processing...' : 'Buy Credits'}
+        {isLoading ? 'Processing...' : !isAuthenticated ? 'Login to Purchase' : 'Buy Credits'}
       </button>
+
+      {/* Auth Modal */}
+      <AuthModal
+        isOpen={isLoginModalOpen}
+        onClose={() => setIsLoginModalOpen(false)}
+        onSuccess={() => {
+          setIsLoginModalOpen(false);
+          // Refresh page to update auth state
+          window.location.reload();
+        }}
+      />
     </div>
   );
 }
@@ -458,23 +510,15 @@ function CreditBundleCard({ product }: CreditBundleCardProps) {
 function PricingPageSkeleton() {
   return (
     <div className="space-y-8">
+      {/* Billing toggle skeleton */}
       <div className="flex justify-center">
         <div className="h-10 w-48 bg-gray-200 rounded-lg animate-pulse"></div>
       </div>
       
+      {/* Pricing cards skeleton */}
       <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
         {[1, 2, 3].map((i) => (
-          <div key={i} className="border-2 border-gray-200 rounded-lg p-8 animate-pulse">
-            <div className="h-6 bg-gray-200 rounded mb-4"></div>
-            <div className="h-4 bg-gray-200 rounded mb-6"></div>
-            <div className="h-8 bg-gray-200 rounded mb-8"></div>
-            <div className="space-y-3 mb-8">
-              {[1, 2, 3, 4].map((j) => (
-                <div key={j} className="h-4 bg-gray-200 rounded"></div>
-              ))}
-            </div>
-            <div className="h-10 bg-gray-200 rounded"></div>
-          </div>
+          <PricingCardSkeleton key={i} />
         ))}
       </div>
     </div>

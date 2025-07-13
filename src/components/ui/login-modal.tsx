@@ -18,24 +18,39 @@ import {
   FormMessage,
 } from "~/components/ui/form";
 import { supabaseBrowser } from "~/util/supabase/browser";
+import { clientApi } from "~/trpc/react";
 
 const loginSchema = z.object({
   email: z.string().email(),
   password: z.string(),
 });
 
-type LoginFormType = z.infer<typeof loginSchema>;
+const signupSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(8, "Must be at least 8 characters"),
+  confirmPassword: z.string().min(8, "Must be at least 8 characters"),
+  firstName: z.string().min(1, "First name is required"),
+  lastName: z.string().min(1, "Last name is required"),
+}).refine((data) => data.password === data.confirmPassword, {
+  message: "Passwords don't match",
+  path: ["confirmPassword"],
+});
 
-interface LoginModalProps {
+type LoginFormType = z.infer<typeof loginSchema>;
+type SignupFormType = z.infer<typeof signupSchema>;
+
+interface AuthModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess?: () => void;
+  initialMode?: 'login' | 'signup';
 }
 
-export function LoginModal({ isOpen, onClose, onSuccess }: LoginModalProps) {
+export function AuthModal({ isOpen, onClose, onSuccess, initialMode = 'login' }: AuthModalProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [mode, setMode] = useState<'login' | 'signup'>(initialMode);
   
-  const form = useForm<LoginFormType>({
+  const loginForm = useForm<LoginFormType>({
     resolver: zodResolver(loginSchema),
     reValidateMode: "onChange",
     defaultValues: {
@@ -44,7 +59,29 @@ export function LoginModal({ isOpen, onClose, onSuccess }: LoginModalProps) {
     },
   });
 
-  const onSubmit = async (data: LoginFormType) => {
+  const signupForm = useForm<SignupFormType>({
+    resolver: zodResolver(signupSchema),
+    reValidateMode: "onChange",
+    defaultValues: {
+      email: "",
+      password: "",
+      confirmPassword: "",
+      firstName: "",
+      lastName: "",
+    },
+  });
+
+  // Initialize user data after successful login/signup to sync email
+  const { mutate: initializeUserData } = clientApi.internal.initializeUserData.useMutation({
+    onSuccess: () => {
+      console.log("User data initialized successfully after auth");
+    },
+    onError: (error) => {
+      console.error("Failed to initialize user data after auth:", error);
+    },
+  });
+
+  const onLoginSubmit = async (data: LoginFormType) => {
     const { email, password } = data;
     setIsSubmitting(true);
     
@@ -62,8 +99,11 @@ export function LoginModal({ isOpen, onClose, onSuccess }: LoginModalProps) {
 
       toast.success("Successfully logged in!");
       
+      // Initialize user data to sync email
+      initializeUserData();
+      
       // Reset form
-      form.reset();
+      loginForm.reset();
       
       // Call success callback if provided
       if (onSuccess) {
@@ -83,6 +123,56 @@ export function LoginModal({ isOpen, onClose, onSuccess }: LoginModalProps) {
     }
   };
 
+  const onSignupSubmit = async (data: SignupFormType) => {
+    const { email, password, firstName, lastName } = data;
+    setIsSubmitting(true);
+    
+    try {
+      const supabase = supabaseBrowser();
+      const authResponse = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            firstName,
+            lastName,
+          },
+        },
+      });
+
+      if (authResponse.error) {
+        toast.error(`Error signing up - ${authResponse.error.message}`);
+        return;
+      }
+
+      if (!authResponse.data.user?.id) {
+        toast.error("Error signing up. That email might be taken already.");
+        return;
+      }
+
+      toast.success("Account created successfully! Please check your email to confirm your account.");
+      
+      // Initialize user data to sync email
+      initializeUserData();
+      
+      // Reset form
+      signupForm.reset();
+      
+      // Call success callback if provided
+      if (onSuccess) {
+        onSuccess();
+      }
+      
+      // Close modal
+      onClose();
+      
+    } catch (error) {
+      toast.error("An unexpected error occurred");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -91,7 +181,9 @@ export function LoginModal({ isOpen, onClose, onSuccess }: LoginModalProps) {
         <div className="p-6">
           {/* Header */}
           <div className="flex justify-between items-center mb-6">
-            <h2 className="text-2xl font-bold text-gray-900">Login</h2>
+            <h2 className="text-2xl font-bold text-gray-900">
+              {mode === 'login' ? 'Login' : 'Sign Up'}
+            </h2>
             <Button 
               variant="ghost" 
               size="sm"
@@ -104,77 +196,205 @@ export function LoginModal({ isOpen, onClose, onSuccess }: LoginModalProps) {
 
           {/* Description */}
           <p className="text-gray-600 mb-6">
-            Enter your email and password to access your account
+            {mode === 'login' 
+              ? 'Enter your email and password to access your account' 
+              : 'Create a new account to get started'
+            }
           </p>
 
           {/* Login Form */}
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-              <FormField
-                control={form.control}
-                name="email"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Email</FormLabel>
-                    <FormControl>
-                      <Input
-                        {...field}
-                        type="email"
-                        placeholder="Enter your email"
-                        disabled={isSubmitting}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+          {mode === 'login' && (
+            <Form {...loginForm}>
+              <form onSubmit={loginForm.handleSubmit(onLoginSubmit)} className="space-y-4">
+                <FormField
+                  control={loginForm.control}
+                  name="email"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Email</FormLabel>
+                      <FormControl>
+                        <Input
+                          {...field}
+                          type="email"
+                          placeholder="Enter your email"
+                          disabled={isSubmitting}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
-              <FormField
-                control={form.control}
-                name="password"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Password</FormLabel>
-                    <FormControl>
-                      <Input
-                        {...field}
-                        type="password"
-                        placeholder="Enter your password"
-                        disabled={isSubmitting}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+                <FormField
+                  control={loginForm.control}
+                  name="password"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Password</FormLabel>
+                      <FormControl>
+                        <Input
+                          {...field}
+                          type="password"
+                          placeholder="Enter your password"
+                          disabled={isSubmitting}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
-              <Button
-                type="submit"
-                className="w-full"
-                disabled={isSubmitting || !form.formState.isValid}
-              >
-                {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Login
-              </Button>
-            </form>
-          </Form>
+                <Button
+                  type="submit"
+                  className="w-full"
+                  disabled={isSubmitting || !loginForm.formState.isValid}
+                >
+                  {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Login
+                </Button>
+              </form>
+            </Form>
+          )}
+
+          {/* Signup Form */}
+          {mode === 'signup' && (
+            <Form {...signupForm}>
+              <form onSubmit={signupForm.handleSubmit(onSignupSubmit)} className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <FormField
+                    control={signupForm.control}
+                    name="firstName"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>First Name</FormLabel>
+                        <FormControl>
+                          <Input
+                            {...field}
+                            placeholder="John"
+                            disabled={isSubmitting}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={signupForm.control}
+                    name="lastName"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Last Name</FormLabel>
+                        <FormControl>
+                          <Input
+                            {...field}
+                            placeholder="Doe"
+                            disabled={isSubmitting}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                <FormField
+                  control={signupForm.control}
+                  name="email"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Email</FormLabel>
+                      <FormControl>
+                        <Input
+                          {...field}
+                          type="email"
+                          placeholder="Enter your email"
+                          disabled={isSubmitting}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={signupForm.control}
+                  name="password"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Password</FormLabel>
+                      <FormControl>
+                        <Input
+                          {...field}
+                          type="password"
+                          placeholder="Enter your password"
+                          disabled={isSubmitting}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={signupForm.control}
+                  name="confirmPassword"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Confirm Password</FormLabel>
+                      <FormControl>
+                        <Input
+                          {...field}
+                          type="password"
+                          placeholder="Confirm your password"
+                          disabled={isSubmitting}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <Button
+                  type="submit"
+                  className="w-full"
+                  disabled={isSubmitting || !signupForm.formState.isValid}
+                >
+                  {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Create Account
+                </Button>
+              </form>
+            </Form>
+          )}
 
           {/* Footer */}
           <div className="mt-6 text-center text-sm text-gray-600">
-            Don&apos;t have an account?{" "}
-            <button
-              onClick={() => {
-                onClose();
-                // In a real app, you'd navigate to signup
-                toast.info("Signup functionality would be implemented here");
-              }}
-              className="text-blue-600 hover:text-blue-800 underline"
-            >
-              Sign up
-            </button>
+            {mode === 'login' ? (
+              <>
+                Don&apos;t have an account?{" "}
+                <button
+                  onClick={() => setMode('signup')}
+                  className="text-blue-600 hover:text-blue-800 underline"
+                >
+                  Sign up
+                </button>
+              </>
+            ) : (
+              <>
+                Already have an account?{" "}
+                <button
+                  onClick={() => setMode('login')}
+                  className="text-blue-600 hover:text-blue-800 underline"
+                >
+                  Login
+                </button>
+              </>
+            )}
           </div>
         </div>
       </div>
     </div>
   );
-} 
+}
+
+// Legacy export for backward compatibility
+export const LoginModal = AuthModal;
