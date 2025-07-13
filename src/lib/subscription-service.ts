@@ -41,6 +41,33 @@ export class SubscriptionService {
   }
 
   /**
+   * In-memory cache to track processed session IDs for one-time payment idempotency
+   * 
+   * Implementation notes: Simple Set-based cache to prevent duplicate processing
+   * during webhook retries. In production, consider using Redis or database.
+   */
+  private processedSessions = new Set<string>();
+
+  /**
+   * Check if checkout session has already been processed
+   * 
+   * Implementation notes: Used to prevent duplicate credit allocation for one-time payments
+   */
+  async isSessionProcessed(sessionId: string): Promise<boolean> {
+    return this.processedSessions.has(sessionId);
+  }
+
+  /**
+   * Mark checkout session as processed for idempotency
+   * 
+   * Implementation notes: Adds session ID to processed set to prevent duplicate processing
+   */
+  async markSessionProcessed(sessionId: string): Promise<void> {
+    this.processedSessions.add(sessionId);
+    console.log(`[credits] Marked session ${sessionId} as processed`);
+  }
+
+  /**
    * Define subscription statuses that should be considered "active" for UI purposes
    * 
    * Implementation notes: These statuses should show a subscription banner in the UI
@@ -477,6 +504,8 @@ export class SubscriptionService {
       return null;
     }
   }
+
+
 }
 
 // Export a singleton instance

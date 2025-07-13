@@ -34,6 +34,7 @@ import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { toast } from "sonner";
+import { AppHeader } from "~/components/layout/AppHeader";
 
 // ==========================================
 // 🔧 CUSTOMIZE THIS SECTION FOR YOUR USE CASE
@@ -289,29 +290,21 @@ export function N8nDemoClient() {
   };
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center p-4">
-      <div className="w-full max-w-6xl space-y-6">
-        
-        {/* ==========================================
-            🎨 OPTIONALLY CUSTOMIZE: Page Header & Description
-            ========================================== */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center justify-between">
-              N8N Integration Demo - Dynamic Field Handling {/* ✅ CUSTOMIZE: Update page title */}
-              <div className="flex items-center space-x-4">
-                {/* Usage Credits Counter */}
-                <div className="flex items-center space-x-2 px-3 py-1 bg-blue-50 rounded-full border">
-                  <div className="w-2 h-2 rounded-full bg-blue-500" />
-                  <span className="text-sm font-medium text-blue-700">
-                    {(() => {
-                      const credits = (userData as { usage_credits?: string | number })?.usage_credits;
-                      if (credits === null || credits === undefined) return "Credits: Not set";
-                      const creditsNum = typeof credits === 'string' ? parseInt(credits, 10) : credits;
-                      return isNaN(creditsNum) ? "Credits: Not set" : `Credits: ${creditsNum.toLocaleString()}`;
-                    })()}
-                  </span>
-                </div>
+    <div className="min-h-screen bg-gray-50">
+      {/* Global Header */}
+      <AppHeader currentPage="N8N Demo" />
+      
+      {/* Main Content */}
+      <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="space-y-6">
+          
+          {/* ==========================================
+              🎨 OPTIONALLY CUSTOMIZE: Page Header & Description
+              ========================================== */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle>N8N Integration Demo - Dynamic Field Handling</CardTitle>
                 {/* Connection Status */}
                 <div className="flex items-center space-x-2">
                   <div className={`w-3 h-3 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`} />
@@ -320,23 +313,22 @@ export function N8nDemoClient() {
                   </span>
                 </div>
               </div>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2 text-sm text-muted-foreground">
-              {/* ✅ CUSTOMIZE: Update description for your use case */}
-              <p>
-                <strong>Demo Pattern:</strong> This demo shows clear separation between input fields and persistent fields.
-              </p>
-              <p>
-                <strong>Input Fields:</strong> Form data sent to N8N (no database persistence needed)
-              </p>
-              <p>
-                <strong>Persistent Fields:</strong> Store N8N results or user-specific data (require database columns)
-              </p>
-            </div>
-          </CardContent>
-        </Card>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2 text-sm text-muted-foreground">
+                {/* ✅ CUSTOMIZE: Update description for your use case */}
+                <p>
+                  <strong>Demo Pattern:</strong> This demo shows clear separation between input fields and persistent fields.
+                </p>
+                <p>
+                  <strong>Input Fields:</strong> Form data sent to N8N (no database persistence needed)
+                </p>
+                <p>
+                  <strong>Persistent Fields:</strong> Store N8N results or user-specific data (require database columns)
+                </p>
+              </div>
+            </CardContent>
+          </Card>
 
         {/* Usage Credits Overview */}
         <Card>
@@ -685,7 +677,8 @@ npm run add-field finalDecision`}
             )}
           </CardContent>
         </Card>
-      </div>
+        </div>
+      </main>
     </div>
   );
 }

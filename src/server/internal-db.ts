@@ -156,7 +156,8 @@ export const ensureStripeFieldsOnce = async () => {
       'stripe_subscription_id', 
       'subscription_plan',
       'subscription_status',
-      'usage_credits'
+      'usage_credits',
+      'email'
     ];
     
     // Field type mapping
