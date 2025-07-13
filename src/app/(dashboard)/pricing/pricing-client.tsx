@@ -8,6 +8,8 @@ import { ArrowRight, Loader2 } from 'lucide-react';
 import { clientApi } from "~/trpc/react";
 import { toast } from 'sonner';
 import { useSearchParams } from 'next/navigation';
+import { AuthModal } from "~/components/ui/login-modal";
+import { PricingCardSkeleton } from "~/components/ui/skeleton";
 
 // Type definitions for better TypeScript support
 interface StripePrice {
@@ -132,6 +134,7 @@ export function PricingPageClient() {
               <CreditBundleCard
                 key={product.id}
                 product={product}
+                isAuthenticated={!!userData?.UID}
               />
             ))}
           </div>
@@ -213,7 +216,12 @@ function PricingCard({ price, userData }: PricingCardProps) {
       </ul>
 
       {/* Show subscribe button for all plans - management moved to account dropdown */}
-      <SubscribeButton priceId={price.id} planName={productName} isCurrentPlan={isCurrentPlan} />
+      <SubscribeButton 
+        priceId={price.id} 
+        planName={productName} 
+        isCurrentPlan={isCurrentPlan} 
+        isAuthenticated={!!userData?.UID}
+      />
     </div>
   );
 }
@@ -222,13 +230,16 @@ function PricingCard({ price, userData }: PricingCardProps) {
 function SubscribeButton({ 
   priceId, 
   planName,
-  isCurrentPlan 
+  isCurrentPlan,
+  isAuthenticated
 }: { 
   priceId?: string;
   planName: string;
   isCurrentPlan: boolean;
+  isAuthenticated: boolean;
 }) {
   const [isLoading, setIsLoading] = useState(false);
+  const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   
   const createCheckout = clientApi.payments.createCheckoutSession.useMutation({
     onSuccess: (data) => {
@@ -247,6 +258,12 @@ function SubscribeButton({
       return;
     }
 
+    // If user is not authenticated, show login modal
+    if (!isAuthenticated) {
+      setIsLoginModalOpen(true);
+      return;
+    }
+
     setIsLoading(true);
     
     try {
@@ -257,23 +274,38 @@ function SubscribeButton({
   };
   
   return (
-    <Button 
-      onClick={handleClick} 
-      disabled={isLoading || !priceId || isCurrentPlan}
-      className="w-full"
-      variant={isCurrentPlan ? "outline" : "default"}
-    >
-      {isLoading ? (
-        <Loader2 className="h-4 w-4 animate-spin" />
-      ) : isCurrentPlan ? (
-        "Current Plan"
-      ) : (
-        <>
-          Subscribe
-          <ArrowRight className="h-4 w-4 ml-2" />
-        </>
-      )}
-    </Button>
+    <>
+      <Button 
+        onClick={handleClick} 
+        disabled={isLoading || !priceId || isCurrentPlan}
+        className="w-full"
+        variant={isCurrentPlan ? "outline" : "default"}
+      >
+        {isLoading ? (
+          <Loader2 className="h-4 w-4 animate-spin" />
+        ) : isCurrentPlan ? (
+          "Current Plan"
+        ) : !isAuthenticated ? (
+          "Login to Subscribe"
+        ) : (
+          <>
+            Subscribe
+            <ArrowRight className="h-4 w-4 ml-2" />
+          </>
+        )}
+      </Button>
+      
+      {/* Auth Modal */}
+      <AuthModal
+        isOpen={isLoginModalOpen}
+        onClose={() => setIsLoginModalOpen(false)}
+        onSuccess={() => {
+          setIsLoginModalOpen(false);
+          // Refresh page to update auth state
+          window.location.reload();
+        }}
+      />
+    </>
   );
 }
 
@@ -320,9 +352,10 @@ interface OneTimeProduct {
 
 interface CreditBundleCardProps {
   product: OneTimeProduct;
+  isAuthenticated: boolean;
 }
 
-function CreditBundleCard({ product }: CreditBundleCardProps) {
+function CreditBundleCard({ product, isAuthenticated }: CreditBundleCardProps) {
   const [selectedPriceId, setSelectedPriceId] = useState<string>(() => {
     // Sort prices by usage_credits (lowest to highest) and default to first
     const sortedPrices = [...product.prices].sort((a, b) => {
@@ -333,6 +366,7 @@ function CreditBundleCard({ product }: CreditBundleCardProps) {
     return sortedPrices.length > 0 ? sortedPrices[0]!.id : '';
   });
   const [isLoading, setIsLoading] = useState(false);
+  const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
 
   const createOneTimeCheckout = clientApi.payments.createOneTimeCheckoutSession.useMutation({
     onSuccess: (data) => {
@@ -353,6 +387,12 @@ function CreditBundleCard({ product }: CreditBundleCardProps) {
   const handlePurchase = async () => {
     if (!selectedPriceId) {
       toast.error('Please select a credit bundle');
+      return;
+    }
+
+    // If user is not authenticated, show login modal
+    if (!isAuthenticated) {
+      setIsLoginModalOpen(true);
       return;
     }
     
@@ -449,8 +489,19 @@ function CreditBundleCard({ product }: CreditBundleCardProps) {
         disabled={isLoading || !selectedPriceId}
         className="w-full bg-blue-600 text-white py-3 px-4 rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
       >
-        {isLoading ? 'Processing...' : 'Buy Credits'}
+        {isLoading ? 'Processing...' : !isAuthenticated ? 'Login to Purchase' : 'Buy Credits'}
       </button>
+
+      {/* Auth Modal */}
+      <AuthModal
+        isOpen={isLoginModalOpen}
+        onClose={() => setIsLoginModalOpen(false)}
+        onSuccess={() => {
+          setIsLoginModalOpen(false);
+          // Refresh page to update auth state
+          window.location.reload();
+        }}
+      />
     </div>
   );
 }
@@ -458,23 +509,15 @@ function CreditBundleCard({ product }: CreditBundleCardProps) {
 function PricingPageSkeleton() {
   return (
     <div className="space-y-8">
+      {/* Billing toggle skeleton */}
       <div className="flex justify-center">
         <div className="h-10 w-48 bg-gray-200 rounded-lg animate-pulse"></div>
       </div>
       
+      {/* Pricing cards skeleton */}
       <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
         {[1, 2, 3].map((i) => (
-          <div key={i} className="border-2 border-gray-200 rounded-lg p-8 animate-pulse">
-            <div className="h-6 bg-gray-200 rounded mb-4"></div>
-            <div className="h-4 bg-gray-200 rounded mb-6"></div>
-            <div className="h-8 bg-gray-200 rounded mb-8"></div>
-            <div className="space-y-3 mb-8">
-              {[1, 2, 3, 4].map((j) => (
-                <div key={j} className="h-4 bg-gray-200 rounded"></div>
-              ))}
-            </div>
-            <div className="h-10 bg-gray-200 rounded"></div>
-          </div>
+          <PricingCardSkeleton key={i} />
         ))}
       </div>
     </div>

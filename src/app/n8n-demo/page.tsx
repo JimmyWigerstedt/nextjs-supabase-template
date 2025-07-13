@@ -1,5 +1,10 @@
 import { N8nDemoClient } from "./client-page";
+import { AuthPageWrapper } from "./auth-wrapper";
 
 export default async function N8nDemoPage() {
-  return <N8nDemoClient />;
+  return (
+    <AuthPageWrapper>
+      <N8nDemoClient />
+    </AuthPageWrapper>
+  );
 }
