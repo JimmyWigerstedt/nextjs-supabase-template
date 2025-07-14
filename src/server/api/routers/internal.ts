@@ -311,32 +311,4 @@ export const internalRouter = createTRPCRouter({
     }
   }),
 
-  deleteAccount: authorizedProcedure.mutation(async ({ ctx }) => {
-    const client = await internalDb.connect();
-    try {
-      console.log(`[deleteAccount] Deleting account for user ${ctx.supabaseUser!.id}`);
-      
-      // Delete user data from internal database
-      const result = await client.query(
-        `DELETE FROM "${env.NC_SCHEMA}"."userData" WHERE "UID" = $1 RETURNING *`,
-        [ctx.supabaseUser!.id]
-      );
-      
-      console.log(`[deleteAccount] Deleted ${result.rowCount} row(s) for user ${ctx.supabaseUser!.id}`);
-      
-      // Note: This only deletes from internal database
-      // Supabase user deletion would need to be handled separately
-      // and typically requires admin privileges
-      
-      return {
-        success: true,
-        message: "Account data deleted successfully from internal database",
-      };
-    } catch (error) {
-      console.error(`[deleteAccount] Failed to delete account for ${ctx.supabaseUser!.id}:`, error);
-      throw new Error('Failed to delete account data');
-    } finally {
-      client.release();
-    }
-  }),
 }); 
