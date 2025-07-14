@@ -128,11 +128,6 @@ export function SettingsClient() {
                     <p className="text-gray-900 font-medium">{formatDate(userData?.created_at)}</p>
                   </div>
                   
-                  <div className="space-y-2">
-                    <Label>User ID</Label>
-                    <p className="text-gray-600 font-mono text-sm">{userData?.UID}</p>
-                  </div>
-                  
                                      <div className="space-y-2">
                      <Label>Total Credits</Label>
                      <p className="text-gray-900 font-medium">

@@ -1,10 +1,33 @@
 import { Pool } from 'pg';
 
+// Allowed PostgreSQL field types for userData table
+const ALLOWED_TYPES = [
+  'VARCHAR',    // Variable character string
+  'TEXT',       // Long text
+  'INTEGER',    // 32-bit integer
+  'BIGINT',     // 64-bit integer
+  'BOOLEAN',    // True/false
+  'TIMESTAMP',  // Date and time
+  'DATE',       // Date only
+  'DECIMAL',    // Exact decimal numbers
+  'FLOAT',      // Floating point numbers
+  'JSON',       // JSON data
+  'JSONB'       // Binary JSON (faster queries)
+];
+
 /**
  * @param {string} fieldName
  * @param {string} fieldType
  */
 async function addField(fieldName, fieldType = 'VARCHAR') {
+  // Validate field type
+  const normalizedType = fieldType.toUpperCase();
+  if (!ALLOWED_TYPES.includes(normalizedType)) {
+    console.error(`❌ Invalid field type '${fieldType}'.`);
+    console.error(`   Allowed types: ${ALLOWED_TYPES.join(', ')}`);
+    console.error(`   Example: npm run add-field myField TEXT`);
+    process.exit(1);
+  }
   const dbUrl = process.env.INTERNAL_DATABASE_URL;
   const schema = process.env.NC_SCHEMA;
   
@@ -42,10 +65,10 @@ async function addField(fieldName, fieldType = 'VARCHAR') {
     // Add the field
     await client.query(`
       ALTER TABLE "${schema}"."userData" 
-      ADD COLUMN "${fieldName}" ${fieldType}
+      ADD COLUMN "${fieldName}" ${normalizedType}
     `);
     
-    console.log(`✅ Added field '${fieldName}' with type ${fieldType}`);
+    console.log(`✅ Added field '${fieldName}' with type ${normalizedType}`);
     client.release();
     
   } catch (error) {
