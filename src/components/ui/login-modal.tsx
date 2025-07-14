@@ -48,7 +48,8 @@ interface AuthModalProps {
 
 export function AuthModal({ isOpen, onClose, onSuccess, initialMode = 'login' }: AuthModalProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [mode, setMode] = useState<'login' | 'signup'>(initialMode);
+  const [mode, setMode] = useState<'login' | 'signup' | 'email-sent'>(initialMode);
+  const [signupEmail, setSignupEmail] = useState<string>('');
   
   const loginForm = useForm<LoginFormType>({
     resolver: zodResolver(loginSchema),
@@ -150,21 +151,14 @@ export function AuthModal({ isOpen, onClose, onSuccess, initialMode = 'login' }:
         return;
       }
 
-      toast.success("Account created successfully! Please check your email to confirm your account.");
+      // Store the email for the confirmation screen
+      setSignupEmail(email);
       
-      // Initialize user data to sync email
-      initializeUserData();
+      // Switch to email sent mode instead of closing
+      setMode('email-sent');
       
       // Reset form
       signupForm.reset();
-      
-      // Call success callback if provided
-      if (onSuccess) {
-        onSuccess();
-      }
-      
-      // Close modal
-      onClose();
       
     } catch (error) {
       toast.error("An unexpected error occurred");
@@ -182,7 +176,7 @@ export function AuthModal({ isOpen, onClose, onSuccess, initialMode = 'login' }:
           {/* Header */}
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-2xl font-bold text-gray-900">
-              {mode === 'login' ? 'Login' : 'Sign Up'}
+              {mode === 'login' ? 'Login' : mode === 'signup' ? 'Sign Up' : 'Check Your Email'}
             </h2>
             <Button 
               variant="ghost" 
@@ -198,7 +192,9 @@ export function AuthModal({ isOpen, onClose, onSuccess, initialMode = 'login' }:
           <p className="text-gray-600 mb-6">
             {mode === 'login' 
               ? 'Enter your email and password to access your account' 
-              : 'Create a new account to get started'
+              : mode === 'signup'
+              ? 'Create a new account to get started'
+              : `We've sent a verification email to ${signupEmail}. Please check your inbox and click the verification link to complete your account setup.`
             }
           </p>
 
@@ -366,30 +362,80 @@ export function AuthModal({ isOpen, onClose, onSuccess, initialMode = 'login' }:
             </Form>
           )}
 
-          {/* Footer */}
-          <div className="mt-6 text-center text-sm text-gray-600">
-            {mode === 'login' ? (
-              <>
-                Don&apos;t have an account?{" "}
-                <button
+          {/* Email Verification Screen */}
+          {mode === 'email-sent' && (
+            <div className="space-y-4">
+              {/* Email icon */}
+              <div className="flex justify-center mb-4">
+                <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center">
+                  <svg className="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                  </svg>
+                </div>
+              </div>
+
+              {/* Instructions */}
+              <div className="text-center space-y-2">
+                <p className="text-sm text-gray-600">
+                  Check your spam folder if you don&apos;t see the email within a few minutes.
+                </p>
+                <p className="text-sm text-gray-600">
+                  Once you verify your email, you can return to this page and sign in.
+                </p>
+              </div>
+
+              {/* Action buttons */}
+              <div className="space-y-3">
+                <Button
+                  onClick={() => {
+                    setMode('login');
+                    if (onSuccess) {
+                      onSuccess();
+                    }
+                    onClose();
+                  }}
+                  className="w-full"
+                  variant="default"
+                >
+                  OK
+                </Button>
+                <Button
                   onClick={() => setMode('signup')}
-                  className="text-blue-600 hover:text-blue-800 underline"
+                  className="w-full"
+                  variant="outline"
                 >
-                  Sign up
-                </button>
-              </>
-            ) : (
-              <>
-                Already have an account?{" "}
-                <button
-                  onClick={() => setMode('login')}
-                  className="text-blue-600 hover:text-blue-800 underline"
-                >
-                  Login
-                </button>
-              </>
-            )}
-          </div>
+                  Back to Sign Up
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Footer */}
+          {mode !== 'email-sent' && (
+            <div className="mt-6 text-center text-sm text-gray-600">
+              {mode === 'login' ? (
+                <>
+                  Don&apos;t have an account?{" "}
+                  <button
+                    onClick={() => setMode('signup')}
+                    className="text-blue-600 hover:text-blue-800 underline"
+                  >
+                    Sign up
+                  </button>
+                </>
+              ) : (
+                <>
+                  Already have an account?{" "}
+                  <button
+                    onClick={() => setMode('login')}
+                    className="text-blue-600 hover:text-blue-800 underline"
+                  >
+                    Login
+                  </button>
+                </>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>

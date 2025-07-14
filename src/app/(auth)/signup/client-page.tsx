@@ -1,4 +1,5 @@
 "use client";
+import { useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2 } from "lucide-react";
 import Link from "next/link";
@@ -50,6 +51,9 @@ const signupFormSchema = z
   });
 
 export function SignupClientPage() {
+  const [showEmailSent, setShowEmailSent] = useState(false);
+  const [signupEmail, setSignupEmail] = useState<string>('');
+
   const form = useForm<z.infer<typeof signupFormSchema>>({
     resolver: zodResolver(signupFormSchema),
     defaultValues: {
@@ -89,8 +93,61 @@ export function SignupClientPage() {
       throw new Error(message);
     }
 
-    toast.success(`Check your email to confirm your signup.`);
+    // Store the email and show email sent screen
+    setSignupEmail(email);
+    setShowEmailSent(true);
   };
+
+  if (showEmailSent) {
+    return (
+      <div className="col-span-12 flex flex-col items-center p-2 pt-8 md:col-span-6 md:col-start-4 lg:col-span-4 lg:col-start-5 2xl:col-span-2 2xl:col-start-6">
+        <Card className="w-full">
+          <CardHeader>
+            <CardTitle className="text-xl text-center">Check Your Email</CardTitle>
+            <CardDescription className="text-center">
+              We&apos;ve sent a verification email to <strong>{signupEmail}</strong>.
+              Please check your inbox and click the verification link to complete your account setup.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {/* Email icon */}
+            <div className="flex justify-center mb-6">
+              <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center">
+                <svg className="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                </svg>
+              </div>
+            </div>
+
+            <div className="text-center space-y-2 mb-6">
+              <p className="text-sm text-gray-600">
+                Check your spam folder if you don&apos;t see the email within a few minutes.
+              </p>
+              <p className="text-sm text-gray-600">
+                Once you verify your email, you can return and sign in.
+              </p>
+            </div>
+          </CardContent>
+          <CardFooter>
+            <div className="flex w-full flex-col gap-4 text-center text-sm">
+              <Link href="/login">
+                <Button className="w-full">
+                  OK
+                </Button>
+              </Link>
+              <Button
+                onClick={() => setShowEmailSent(false)}
+                variant="outline"
+                className="w-full"
+              >
+                Back to Sign Up
+              </Button>
+            </div>
+          </CardFooter>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="col-span-12 flex flex-col items-center p-2 pt-8 md:col-span-6 md:col-start-4 lg:col-span-4 lg:col-start-5 2xl:col-span-2 2xl:col-start-6">

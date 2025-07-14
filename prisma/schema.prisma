@@ -1,15 +1,36 @@
 // This is your Prisma schema file,
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
+// ==========================================
+// DUAL DATABASE ARCHITECTURE EXPLANATION
+// ==========================================
+//
+// This schema handles Supabase authentication database only (DATABASE_URL)
+// - Contains auth.users table and related authentication data
+// - Uses Prisma for type-safe auth operations
+//
+// Main application data uses dynamic schema via internal database (INTERNAL_DATABASE_URL)
+// - Contains userData table with dynamic fields
+// - Managed via raw SQL and add-field.js script
+// - Supports runtime schema evolution without code changes
+//
+// Why this separation?
+// 1. Supabase auth requires specific schema structure
+// 2. Application data needs dynamic field management
+// 3. Enables field-driven development without backend changes
+// ==========================================
+
 generator client {
     provider = "prisma-client-js"
 }
 
 datasource db {
     provider = "postgresql"
-    url      = env("DATABASE_URL")
+    url      = env("DATABASE_URL")  // Supabase auth database
 }
 
+// Sample model for Prisma setup - not used in main application
+// Real app uses userData table in internal database with dynamic schema
 model Post {
     id        Int      @id @default(autoincrement())
     name      String

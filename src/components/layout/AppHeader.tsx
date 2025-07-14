@@ -224,7 +224,14 @@ export function AppHeader({
                       </Link>
                     </DropdownMenuItem>
                     <DropdownMenuItem 
-                      onClick={() => createPortal.mutate()}
+                      onClick={() => {
+                        // Check if user has Stripe customer ID or canceled subscription, otherwise redirect to pricing
+                        if (!userData?.stripe_customer_id || userData?.subscription_status === 'canceled') {
+                          router.push('/pricing');
+                        } else {
+                          createPortal.mutate();
+                        }
+                      }}
                       disabled={createPortal.isPending}
                     >
                       <CreditCard className="mr-2 h-4 w-4" />
