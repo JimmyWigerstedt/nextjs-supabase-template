@@ -11,126 +11,284 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `npm run lint` - Run ESLint for code quality checks
 - `npm run add-field <fieldName> [fieldType]` - Add dynamic fields to the database (default type: VARCHAR)
 
-### Build Testing
-- `./build-temp.bat` - Test build with placeholder environment variables (Windows)
-- For manual testing: Use the environment variables from `build-temp.bat` inline with npm run build
-
 ### Database Commands
 - `npm run db:generate` - Generate and apply Prisma migrations in development
 - `npm run db:migrate` - Deploy migrations to production database
 - `npm run db:push` - Push schema changes directly to database (dev only)
 - `npm run db:studio` - Open Prisma Studio for database browsing
 
-## Architecture Overview
+## System Overview
 
-This is a **Next.js 14 full-stack template** built for rapid development of custom data management applications with real-time N8N workflow integration.
+**Next.js 14 full-stack template** with dynamic field system, N8N integration, and Stripe subscriptions.
 
-### Core Technology Stack
+### Core Stack
 - **Next.js 14** with App Router
-- **tRPC** for end-to-end type-safe APIs
-- **Prisma** for database ORM
-- **Supabase** for authentication and primary database  
-- **PostgreSQL** (via NocoDB) for dynamic data storage
+- **tRPC** for type-safe APIs
+- **Supabase** for authentication
+- **PostgreSQL** for data storage
+- **Stripe** for subscriptions
 - **TailwindCSS + ShadCN UI** for styling
-- **N8N** for workflow automation
-- **Server-Sent Events (SSE)** for real-time updates
 
-### Database Architecture
-The template uses a **dual-database approach**:
-- **Supabase Database**: Authentication, user profiles, and static data
-- **Internal Database (NocoDB)**: Dynamic user data with auto-generated fields
+### Two Database System (Critical)
+- **`db` (Prisma)**: Supabase authentication database - handles auth.user table
+- **`internalDb`**: Main application database - handles `userData` table with Stripe metadata
 
-Key concepts:
-- Dynamic fields can be added without code changes using `npm run add-field`
-- All user data goes into a single `userData` table with dynamic columns
-- Real-time updates via webhooks and SSE connections
+**Key Point**: Stripe integration writes to `internalDb.userData` table, NOT the auth database.
 
-### Template Pattern System
-
-The core innovation is a **field-driven component system**:
-
-```typescript
-// Define once, drives entire UI and data flow
-const INPUT_FIELDS = ['customerEmail', 'orderQuantity'];      // Form inputs → N8N
-const PERSISTENT_FIELDS = ['orderStatus', 'trackingNumber']; // Database storage
+### Environment Variables (Reference Only)
+```bash
+DATABASE_URL="supabase-connection"
+INTERNAL_DATABASE_URL="main-app-database"
+N8N_BASE_URL="n8n-instance-url"
+N8N_WEBHOOK_SECRET="webhook-auth"
+STRIPE_SECRET_KEY="stripe-api-key"
+STRIPE_WEBHOOK_SECRET="stripe-webhook-auth"
+NC_SCHEMA="database-schema-name"
 ```
 
-This configuration automatically generates:
-- Form inputs with proper state management
-- Database operations (INSERT/UPDATE)
-- N8N payload structure
-- UI display sections with inline editing
-- Real-time update highlighting
+## Core Data Flow
 
-### File Structure
+### Template Pattern
+All pages use this pattern:
+```typescript
+const INPUT_FIELDS = ['field1', 'field2'];      // Form → N8N
+const PERSISTENT_FIELDS = ['result1', 'result2']; // Database storage
+```
 
-#### Core Application Structure
-- `src/app/` - Next.js App Router pages
-  - `(auth)/` - Authentication pages (login, signup)
-  - `(dashboard)/` - Main application pages (dashboard, settings, pricing)
-  - `n8n-demo/` - **Reference implementation** showing the template pattern
-  - `api/` - API routes (tRPC, webhooks, SSE endpoints)
+### N8N Integration (Black Box)
+- App sends payload to N8N with INPUT_FIELDS
+- N8N processes data and updates database
+- N8N sends webhook back to trigger UI updates
+- **Do not modify payload structure**
 
-#### Component Architecture
-- `src/components/ui/` - ShadCN UI components and custom UI elements
-- `src/components/layout/` - Layout components (AppHeader, etc.)
-- `src/server/api/` - tRPC router definitions and business logic
-- `src/trpc/` - tRPC client/server configuration
+### Stripe Integration
+- Local database caches subscription data for performance
+- Webhooks sync changes from Stripe to local cache
+- Credit system tracks usage via `usage_credits` field
 
-#### Key Integration Files
-- `src/env.js` - Environment validation (includes N8N, Stripe, database configs)
-- `src/lib/` - Utility functions (payments, SSE, database helpers)
-- `scripts/add-field.js` - Dynamic field addition script
-- `prisma/schema.prisma` - Database schema (minimal - most data is dynamic)
+## Stripe System Overview
+
+### How Stripe Works in This App
+1. **Local Cache**: Subscription data stored in `userData` table for fast access
+2. **Webhook Updates**: Stripe events automatically update local cache
+3. **API Fallback**: Missing data fetched from Stripe API when needed
+
+### Stripe Database Fields (in userData table)
+```sql
+"stripe_customer_id" VARCHAR        -- Links to Stripe customer
+"stripe_subscription_id" VARCHAR    -- Links to Stripe subscription  
+"subscription_plan" VARCHAR         -- Resolved plan name for features
+"subscription_status" VARCHAR       -- active, past_due, canceled, etc
+"usage_credits" INTEGER             -- Credit balance from payments
+```
+
+### Stripe Webhook Flow
+1. **Payment succeeds** → `invoice.payment_succeeded` → Credits allocated to user
+2. **Subscription changes** → `customer.subscription.updated` → Plan/status updated
+3. **Checkout completes** → `checkout.session.completed` → New subscription setup
+
+### Credit System Rules
+- **Credits allocated only when payments succeed** (not when subscriptions change)
+- **Credits are additive** - they accumulate and never expire
+- **Billing reasons determine behavior**:
+  - Renewals: Replace credits (fresh billing period)
+  - Upgrades: Add credits (prorated amount)
+  - One-time purchases: Add credits
+
+## File Structure
+
+### Pages
+- `src/app/n8n-demo/` - **Template reference implementation**
+- `src/app/template-page/` - Example adaptation
+- `src/app/(dashboard)/` - Main app pages
+- `src/app/(auth)/` - Login/signup pages
+
+### Core Integration
+- `src/server/api/routers/internal.ts` - **Main API router** (dynamic field handling)
+- `src/lib/subscription-service.ts` - **Stripe business logic**
+- `src/lib/subscription-db.ts` - Database operations for Stripe
+- `src/lib/stripe-product-utils.ts` - Product name resolution and feature access
+- `src/server/internal-db.ts` - Database client
+
+### Stripe Files
+- `src/lib/payments/stripe.ts` - Stripe client
+- `src/lib/payments/actions.ts` - tRPC payment procedures
+- `src/app/api/stripe/webhook/route.ts` - **Stripe webhook handler** (updates userData)
+- `src/app/(dashboard)/pricing/` - Pricing page UI
+
+### Supporting Files
+- `src/components/ui/` - UI components
+- `src/components/layout/AppHeader.tsx` - Global header
+- `src/lib/sse-utils.ts` - Real-time updates
+- `src/app/api/` - Webhook handlers and SSE endpoints
+
+## Database Schema
+
+### userData Table (Main)
+```sql
+"UID" VARCHAR PRIMARY KEY              -- User ID from Supabase
+"email" VARCHAR                        -- User email
+"usage_credits" INTEGER DEFAULT 0      -- Stripe credit balance
+"stripe_customer_id" VARCHAR           -- Stripe customer reference
+"stripe_subscription_id" VARCHAR       -- Stripe subscription reference
+"subscription_plan" VARCHAR            -- Plan name for feature access
+"subscription_status" VARCHAR          -- Subscription state
+"created_at" TIMESTAMP                 -- Record creation
+"updated_at" TIMESTAMP                 -- Last update
+-- Plus any dynamic fields added via npm run add-field
+```
 
 ## Development Patterns
 
 ### Creating New Pages
-1. **Copy the template**: `cp src/app/n8n-demo/client-page.tsx src/app/your-page/client-page.tsx`
-2. **Define your fields**:
+1. **Copy template**: `cp src/app/n8n-demo/client-page.tsx src/app/your-page/client-page.tsx`
+2. **Update field arrays**:
    ```typescript
-   const INPUT_FIELDS = ['your', 'form', 'fields'];
-   const PERSISTENT_FIELDS = ['your', 'database', 'fields'];
+   const INPUT_FIELDS = ['yourField1', 'yourField2'];
+   const PERSISTENT_FIELDS = ['resultField1', 'resultField2'];
    ```
-3. **Add database columns**: `npm run add-field fieldName` for each PERSISTENT_FIELD
-4. **Customize labels and validation** in the UI sections
-5. **Test integration** with N8N workflows
+3. **Add database columns**: `npm run add-field resultField1` (for each PERSISTENT_FIELD)
+4. **Customize UI labels and validation**
 
-### N8N Integration Flow
-1. **User submits form** → tRPC sends INPUT_FIELDS to N8N webhook
-2. **N8N processes data** → Updates database directly with results
-3. **N8N sends webhook** → `/api/webhooks/internal-updated` with updatedFields array
-4. **Real-time UI updates** → SSE triggers field highlighting and data refresh
+### Adding New Database Fields
+```bash
+# Adds VARCHAR column to userData table
+npm run add-field newFieldName
 
-### Environment Variables
-Required environment variables (defined in `src/env.js`):
-- `DATABASE_URL` - Supabase database connection
-- `INTERNAL_DATABASE_URL` - NocoDB database connection
-- `N8N_BASE_URL`, `N8N_WEBHOOK_SECRET`, `N8N_TIMEOUT` - N8N integration
-- `NC_SCHEMA` - NocoDB schema name
-- `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` - Payment processing
-- `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` - Supabase client
+# Specify type
+npm run add-field newFieldName INTEGER
+```
 
-## Testing and Validation
+### tRPC Patterns
+```typescript
+// Get user data (includes Stripe metadata)
+const { data: userData } = api.internal.getUserData.useQuery();
 
-### Common Development Tasks
-- **Test builds**: Always run `npm run build` before deploying
-- **Lint code**: Run `npm run lint` to catch issues
-- **Check types**: TypeScript compilation happens during build
-- **Database sync**: Use `npm run db:push` in development, `npm run db:migrate` in production
+// Update any fields dynamically
+const { mutate: updateUserData } = api.internal.updateUserData.useMutation();
 
-### N8N Integration Testing
-1. Verify webhook endpoints are accessible
-2. Test payload structure matches expected format
-3. Confirm database updates trigger real-time UI changes
-4. Validate error handling for failed workflows
+// Send to N8N (includes usage_credits automatically)
+const { mutate: sendToN8n } = api.internal.sendToN8n.useMutation();
 
-## Key Files for Customization
+// Stripe operations
+const { data: subscription } = api.payments.getCurrentSubscription.useQuery();
+const { mutate: createCheckout } = api.payments.createCheckoutSession.useMutation();
+const { mutate: createPortal } = api.payments.createCustomerPortalSession.useMutation();
 
-When adapting this template:
-- **Start with**: `src/app/n8n-demo/client-page.tsx` (reference implementation)
-- **Configure**: Field arrays and validation logic
-- **Extend**: `src/server/api/routers/internal.ts` for custom business logic
-- **Style**: Components inherit from ShadCN UI system with Tailwind classes
+// Feature access control
+const { data: hasFeature } = api.payments.hasFeature.useQuery({ 
+  feature: 'advanced_features' 
+});
+```
 
-The template is designed for **rapid prototyping** while maintaining **production-ready** patterns for authentication, real-time updates, type safety, and workflow integration.
+### Component State Pattern (Copy Exactly)
+```typescript
+// Required state for template components
+const [inputData, setInputData] = useState<Record<string, string>>(
+  INPUT_FIELDS.reduce((acc, field) => {
+    acc[field] = "";
+    return acc;
+  }, {} as Record<string, string>)
+);
+
+const [editableValues, setEditableValues] = useState<Record<string, string>>({});
+const [persistentData, setPersistentData] = useState<Record<string, string>>({});
+
+// Required helper functions
+const updateInputField = (fieldName: string, value: string) => {
+  setInputData(prev => ({ ...prev, [fieldName]: value }));
+};
+
+const updateEditableField = (fieldName: string, value: string) => {
+  setEditableValues(prev => ({ ...prev, [fieldName]: value }));
+};
+```
+
+## Critical: Do Not Modify
+
+### API Payload Structures
+```typescript
+// N8N payload (required format)
+{
+  "user_id": "uuid",
+  "user_email": "email", 
+  "usage_credits": 1000,
+  "data": { ...INPUT_FIELDS },
+  "action": "process"
+}
+
+// N8N response (required format)
+{
+  "user_id": "uuid",
+  "updatedFields": ["field1", "field2"]
+}
+```
+
+### Core Files (Modify Carefully)
+- `src/server/api/routers/internal.ts` - Dynamic SQL generation
+- `src/lib/sse-utils.ts` - Global connection management
+- `src/app/api/webhooks/internal-updated/route.ts` - Webhook handler
+- `src/app/api/stream/user-updates/route.ts` - SSE endpoint
+- `src/app/api/stripe/webhook/route.ts` - **Stripe webhook handler** (handles credit allocation)
+
+### Database Operations
+- User ID must always be `ctx.supabaseUser!.id`
+- Always use parameterized queries for dynamic fields
+- Credit operations use database transactions
+- **Stripe webhooks write directly to userData table**
+
+## Real-Time Updates
+
+### SSE Connection (Copy Pattern)
+```typescript
+useEffect(() => {
+  const eventSource = new EventSource("/api/stream/user-updates");
+  eventSourceRef.current = eventSource;
+  
+  eventSource.onopen = () => setIsConnected(true);
+  eventSource.onmessage = (event) => {
+    const data = JSON.parse(event.data);
+    if (data.type === "userData-updated") {
+      setLastUpdate(data.timestamp);
+      void utils.internal.getUserData.invalidate();
+    }
+  };
+  
+  return () => eventSource.close();
+}, []);
+```
+
+## Feature Access Control
+
+```typescript
+// Check subscription features
+const { data: hasFeature } = api.payments.hasFeature.useQuery({ 
+  feature: 'advanced_features' 
+});
+
+// Feature mapping in stripe-product-utils.ts
+const featureMap: Record<string, string[]> = {
+  'free': ['basic_features'],
+  'pro': ['basic_features', 'advanced_features'],
+  'enterprise': ['basic_features', 'advanced_features', 'enterprise_features'],
+};
+```
+
+## Common Tasks
+
+### Add New Field Type
+1. `npm run add-field fieldName`
+2. Add to PERSISTENT_FIELDS array in component
+3. Update UI labels in formatFieldName function
+
+### Add New Feature Gate
+1. Update featureMap in `src/lib/stripe-product-utils.ts`
+2. Use `api.payments.hasFeature.useQuery()` in component
+
+### Add New Page
+1. Copy n8n-demo structure
+2. Update field arrays
+3. Add database columns for persistent fields
+4. Test N8N integration
+
+This template enables rapid page creation by copying proven patterns and updating field configurations.
