@@ -4,12 +4,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Development Commands
 
-### Essential Commands
-- `npm run dev` - Start development server on http://localhost:3000
-- `npm run build` - Build the application for production
-- `npm run start` - Start production server (requires build first)
-- `npm run lint` - Run ESLint for code quality checks
-- `npm run add-field <fieldName> [fieldType]` - Add dynamic fields to the database (default type: VARCHAR)
+
+### Build Testing
+- `./build-temp.bat` - Test build with placeholder environment variables (Windows)
+- For manual testing: Use the environment variables from `build-temp.bat` inline with npm run build
+
 
 ### Database Commands
 - `npm run db:generate` - Generate and apply Prisma migrations in development
