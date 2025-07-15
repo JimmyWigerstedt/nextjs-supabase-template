@@ -38,80 +38,127 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    // Parse webhook payload
+    // Parse webhook payload for new results-based format
     const body = await request.json() as {
-      user_id: string;
-      updatedFields: string[];
+      id: string;
+      status: string;
+      credit_cost?: number;
+      output_data?: Record<string, unknown>;
     };
-    const { user_id, updatedFields } = body;
+    const { id, status, credit_cost, output_data } = body;
     
-    if (!user_id || !Array.isArray(updatedFields)) {
+    if (!id || !status) {
       console.warn(`${LOG_PREFIX} Invalid payload structure`, { body });
       return NextResponse.json(
-        { error: "Invalid payload: user_id and updatedFields required" },
+        { error: "Invalid payload: id and status required" },
         { status: 400 }
       );
     }
     
-    console.info(`${LOG_PREFIX} Processing update for user ${user_id}`, {
-      updatedFields,
+    console.info(`${LOG_PREFIX} Processing results update for ${id}`, {
+      status,
+      credit_cost,
+      hasOutputData: !!output_data,
     });
     
-    // Validate updatedFields format
-    if (!Array.isArray(updatedFields) || updatedFields.some(field => typeof field !== 'string')) {
-      console.warn(`${LOG_PREFIX} Invalid updatedFields format`, { updatedFields });
+    // Validate status and id format
+    if (typeof status !== 'string' || !id.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)) {
+      console.warn(`${LOG_PREFIX} Invalid id or status format`, { id, status });
       return NextResponse.json(
-        { error: "updatedFields must be an array of strings" },
+        { error: "Invalid id format or status" },
         { status: 400 }
       );
     }
 
-    // Filter out potentially dangerous field names
-    const safeFields = updatedFields.filter(field => 
-      /^[a-zA-Z][a-zA-Z0-9_]*$/.test(field) && // Valid identifier
-      !['UID', 'created_at', 'updated_at'].includes(field) // Not system fields
-    );
+    let user_id: string | undefined;
+    let workflow_id: string | undefined;
 
-    if (safeFields.length === 0) {
-      console.warn(`${LOG_PREFIX} No valid fields to update`, { updatedFields });
-      return NextResponse.json(
-        { error: "No valid fields provided" },
-        { status: 400 }
-      );
-    }
-
-    // Fetch current values from database (n8n already updated the database)
-    const fetchedValues: Record<string, string> = {};
     try {
       const client = await internalDb.connect();
       try {
-        const result = await client.query(
-          `SELECT * FROM "${env.NC_SCHEMA}"."userData" WHERE "UID" = $1`,
-          [user_id]
-        );
+        // Use transaction for atomic updates
+        await client.query('BEGIN');
         
-        if (result.rows.length > 0) {
-          const userData = result.rows[0] as Record<string, unknown>;
-          // Extract ALL requested fields dynamically
-          for (const field of safeFields) {            
-            fetchedValues[field] = String(userData[field] ?? '');
-          }
-          console.info(`${LOG_PREFIX} Fetched values for user ${user_id}:`, fetchedValues);
-        } else {
-          console.warn(`${LOG_PREFIX} No user data found for user ${user_id}`);
+        // Calculate duration and update results record
+        const updateQuery = `
+          UPDATE "${env.NC_SCHEMA}"."results" 
+          SET "status" = $1, 
+              "completed_at" = CASE WHEN $1 IN ('completed', 'failed') THEN CURRENT_TIMESTAMP ELSE "completed_at" END,
+              "duration_ms" = CASE WHEN $1 IN ('completed', 'failed') THEN 
+                EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - "created_at")) * 1000 
+                ELSE "duration_ms" END,
+              "credits_consumed" = COALESCE($2, "credits_consumed"),
+              "output_data" = COALESCE($3::jsonb, "output_data")
+          WHERE "id" = $4
+          RETURNING "user_id", "workflow_id"
+        `;
+        
+        const updateResult = await client.query(updateQuery, [
+          status,
+          credit_cost ?? null,
+          output_data ? JSON.stringify(output_data) : null,
+          id
+        ]);
+        
+        if (updateResult.rows.length === 0) {
+          await client.query('ROLLBACK');
+          console.warn(`${LOG_PREFIX} Results record not found for id ${id}`);
+          return NextResponse.json(
+            { error: "Results record not found" },
+            { status: 404 }
+          );
         }
+        
+        const resultsRecord = updateResult.rows[0] as { user_id: string; workflow_id: string };
+        user_id = resultsRecord.user_id;
+        workflow_id = resultsRecord.workflow_id;
+        
+        // Deduct credits from userData if credit_cost provided
+        if (credit_cost && credit_cost > 0) {
+          await client.query(
+            `UPDATE "${env.NC_SCHEMA}"."userData" 
+             SET "usage_credits" = GREATEST(0, COALESCE("usage_credits", 0) - $1),
+                 "updated_at" = CURRENT_TIMESTAMP
+             WHERE "UID" = $2`,
+            [credit_cost, user_id]
+          );
+          console.info(`${LOG_PREFIX} Deducted ${credit_cost} credits from user ${user_id}`);
+        }
+        
+        await client.query('COMMIT');
+        
+        console.info(`${LOG_PREFIX} Updated results record ${id} for user ${user_id}`, {
+          status,
+          credit_cost,
+        });
+      } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
       } finally {
         client.release();
       }
     } catch (dbError) {
-      console.error(`${LOG_PREFIX} Database fetch failed:`, dbError);
-      // Continue processing even if DB fetch fails
+      console.error(`${LOG_PREFIX} Database update failed:`, dbError);
+      return NextResponse.json(
+        { error: "Database update failed" },
+        { status: 500 }
+      );
     }
     
-    // Prepare update data
+    // Determine SSE message type based on status
+    let messageType = "result-updated";
+    if (status === "completed") {
+      messageType = "result-done";
+    } else if (status === "failed") {
+      messageType = "result-failed";
+    }
+    
+    // Prepare results-focused update data
     const updateData = {
-      updatedFields: safeFields,
-      fetchedValues,
+      type: messageType,
+      id,
+      status,
+      workflow_id,
       timestamp: new Date().toISOString(),
     };
     
@@ -129,8 +176,9 @@ export async function POST(request: NextRequest) {
     
     return NextResponse.json({
       success: true,
-      message: `Update processed for user ${user_id}`,
-      updatedFields: safeFields,
+      message: `Results update processed for ${id}`,
+      status,
+      messageType,
       sentRealTime,
     });
     
