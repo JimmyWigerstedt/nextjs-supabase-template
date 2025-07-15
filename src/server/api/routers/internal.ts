@@ -1,21 +1,24 @@
 // ==========================================
-// TEMPLATE: Dynamic Field Router
+// TEMPLATE: N8N Results Table Router
 // ==========================================
-// This router handles any field names without code modifications.
-// After implementing the flexibility changes, adding new fields
-// requires only database schema updates - no backend code changes.
+// This router manages N8N workflow integration with complete run tracking.
+// Results table provides comprehensive audit trails for all workflow executions.
 //
-// DYNAMIC CAPABILITIES:
-// - updateUserData: Accepts any field names as input
-// - getUserData: Returns all user fields dynamically  
-// - sendToN8n: Forwards any fields to n8n workflows
+// RESULTS TABLE CAPABILITIES:
+// - sendToN8n: Creates results record and forwards to N8N with run_id
+// - getWorkflowHistory: Retrieves user's workflow run history  
+// - getRunDetails: Gets specific run details and results
+// - deleteRun: Removes run from history
+// - All operations maintain complete audit trail
+//
+// DYNAMIC FIELD CAPABILITIES:
+// - updateUserData: Accepts any field names for userData table
+// - getUserData: Returns all user fields dynamically
 // - All SQL operations handle field names dynamically
 //
 // CREDITS SYSTEM:
 // - usage_credits are ADDITIVE and NEVER EXPIRE
-// - At signup: Add initial credits
-// - At subscription renewal: Add credits (don't replace)
-// - One-time bundles: Add credits to existing total
+// - Credit deduction happens during sendToN8n operation
 // - Credits accumulate over time and persist indefinitely
 // ==========================================
 

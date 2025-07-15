@@ -18,20 +18,22 @@ const INPUT_FIELDS = [
   'orderQuantity'     // Form input → N8N payload → cleared
 ];
 
-// PERSISTENT_FIELDS: Database columns for storage and real-time updates
-const PERSISTENT_FIELDS = [
-  'orderStatus',      // Database column → display/edit → real-time updates
-  'trackingNumber',   // Database column → display/edit → real-time updates
-  'customerNotes'     // Database column → display/edit → real-time updates
+// EXPECTED_RESULTS_SCHEMA: Expected outputs from N8N workflow
+const EXPECTED_RESULTS_SCHEMA = [
+  'orderStatus',      // Expected from N8N → stored in results table
+  'trackingNumber',   // Expected from N8N → stored in results table
+  'customerNotes'     // Expected from N8N → stored in results table
 ];
+
+// WORKFLOW_ID: Unique identifier for this workflow
+const WORKFLOW_ID = 'your-workflow-name';
 ```
 
-### 3. **Add Database Columns**
+### 3. **Database Setup**
 ```bash
-# Add PERSISTENT_FIELDS to database (INPUT_FIELDS don't need columns)
-npm run add-field orderStatus
-npm run add-field trackingNumber
-npm run add-field customerNotes
+# Results table is automatically created - no manual setup needed
+# Optional: Add fields to userData table for user profile data
+npm run add-field customUserField
 ```
 
 ### 4. **Update Component Details**
@@ -60,20 +62,29 @@ Your workflow receives:
 {
   "user_id": "uuid",
   "user_email": "email@example.com",
+  "usage_credits": 1000,
   "data": {
     "customerEmail": "value",
     "productSku": "value",
     "orderQuantity": "value"
   },
-  "action": "process"
+  "action": "process",
+  "run_id": "550e8400-e29b-41d4-a716-446655440000",
+  "workflow_id": "your-workflow-name",
+  "expected_results_schema": ["orderStatus", "trackingNumber"]
 }
 ```
 
-Your workflow should send back:
+Your workflow should send back via webhook:
 ```json
 {
-  "user_id": "uuid", 
-  "updatedFields": ["orderStatus", "trackingNumber"]
+  "run_id": "550e8400-e29b-41d4-a716-446655440000",
+  "status": "completed",
+  "results": {
+    "orderStatus": "processing",
+    "trackingNumber": "1Z999AA1234567890"
+  },
+  "credits_used": 10
 }
 ```
 
@@ -97,7 +108,8 @@ src/app/your-new-page/
 
 ### **Customize These**
 - `INPUT_FIELDS` array
-- `PERSISTENT_FIELDS` array
+- `EXPECTED_RESULTS_SCHEMA` array
+- `WORKFLOW_ID` constant
 - Component name
 - Page title and descriptions
 - Field formatting functions
@@ -121,6 +133,19 @@ NC_SCHEMA="pjo77o6pg08pd9l"
 ```
 
 ## 🔄 **Common Patterns**
+
+### **Run History Management**
+```typescript
+// Get workflow history
+const { data: workflowHistory, refetch: refetchHistory } = 
+  api.internal.getWorkflowHistory.useQuery();
+
+// Get specific run details
+const { data: runDetails } = api.internal.getRunDetails.useQuery({ runId });
+
+// Delete run from history
+const { mutate: deleteRun } = api.internal.deleteRun.useMutation();
+```
 
 ### **Field Validation**
 ```typescript
@@ -159,32 +184,49 @@ const handleSendToN8n = () => {
     orderQuantity: parseInt(inputData.orderQuantity)
   };
   
-  sendToN8n(processedData);
+  // Send with results tracking
+  sendToN8n({
+    data: processedData,
+    workflow_id: WORKFLOW_ID,
+    expected_results_schema: EXPECTED_RESULTS_SCHEMA
+  });
 };
 ```
 
-## 📊 **Database Field Management**
+## 📊 **Results Table Management**
 
-### **Valid Field Names**
-- ✅ `customerName`, `order_status`, `shipment123`
-- ❌ `customer-name`, `order status`, `123order`
+### **Results Table Schema**
+- `id` (UUID primary key)
+- `user_id` (user identifier)
+- `workflow_id` (workflow identifier)
+- `status` (running, completed, failed, or custom)
+- `input_data` (JSONB - original form data)
+- `results` (JSONB - N8N workflow results)
+- `expected_results_schema` (JSONB - expected output fields)
+- `credits_used` (INTEGER - credit consumption)
+- `created_at`, `updated_at`, `completed_at` (timestamps)
 
-### **Reserved Field Names**
-- `UID` (user identifier)
-- `created_at` (timestamp)
-- `updated_at` (timestamp)
+### **Status Values**
+- `running` - Workflow in progress
+- `completed` - Workflow finished successfully
+- `failed` - Workflow encountered an error
+- Custom statuses - Any freetext for workflow-specific updates
 
-### **Field Type Mapping**
+### **JSONB Field Structure**
 ```typescript
-// Database column types
-const fieldTypes = {
-  'email': 'VARCHAR(255)',
-  'phone': 'VARCHAR(20)',
-  'date': 'DATE',
-  'number': 'INTEGER',
-  'text': 'TEXT',
-  'boolean': 'BOOLEAN'
-};
+// input_data example
+{
+  "customerEmail": "customer@example.com",
+  "productSku": "PROD-123",
+  "orderQuantity": "2"
+}
+
+// results example
+{
+  "orderStatus": "processing",
+  "trackingNumber": "1Z999AA1234567890",
+  "customerNotes": "Rush delivery"
+}
 ```
 
 ## 🔍 **Debug Commands**
@@ -193,19 +235,22 @@ const fieldTypes = {
 ```bash
 # Test database connection
 npm run dev
-# Visit /n8n-demo and click "Test Connection"
+# Visit /n8n-demo and check run history loads
 ```
 
-### **Field Verification**
+### **Results Table Verification**
 ```bash
-# Check database columns
+# Check results table structure
 # Visit /n8n-demo and click "Show Debug Info"
+# Check workflow history for run records
 ```
 
-### **N8N Payload Testing**
+### **N8N Integration Testing**
 ```bash
 # Check browser network tab when sending to N8N
 # Look for POST requests to /api/trpc/internal.sendToN8n
+# Monitor run status changes in real-time
+# Verify webhook responses in browser console
 ```
 
 ## 🚀 **Performance Tips**
@@ -270,10 +315,14 @@ const ORDER_FIELDS = ['productSku', 'orderQuantity'];
 ## 📋 **Testing Checklist**
 
 - [ ] All INPUT_FIELDS display correctly
-- [ ] All PERSISTENT_FIELDS save to database
-- [ ] N8N receives correct payload format
-- [ ] N8N returns correct response format
-- [ ] Real-time updates work
+- [ ] EXPECTED_RESULTS_SCHEMA properly defined
+- [ ] WORKFLOW_ID set correctly
+- [ ] N8N receives correct payload format with run_id
+- [ ] N8N returns correct webhook response
+- [ ] Results table records created properly
+- [ ] Real-time status updates work
+- [ ] Run history displays correctly
+- [ ] Delete functionality works
 - [ ] Error handling works
 - [ ] Field validation works
 

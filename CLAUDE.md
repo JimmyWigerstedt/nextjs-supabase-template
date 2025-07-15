@@ -30,9 +30,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### Two Database System (Critical)
 - **`db` (Prisma)**: Supabase authentication database - handles auth.user table
-- **`internalDb`**: Main application database - handles `userData` table with Stripe metadata
+- **`internalDb`**: Main application database - handles `userData` table with Stripe metadata AND `results` table for N8N workflow tracking
 
-**Key Point**: Stripe integration writes to `internalDb.userData` table, NOT the auth database.
+**Key Point**: Stripe integration writes to `internalDb.userData` table, N8N results stored in `internalDb.results` table.
 
 ### Environment Variables (Reference Only)
 ```bash
@@ -47,18 +47,19 @@ NC_SCHEMA="database-schema-name"
 
 ## Core Data Flow
 
-### Template Pattern
-All pages use this pattern:
+### Results Table Architecture
+The system uses a dedicated results table for N8N workflow tracking:
 ```typescript
 const INPUT_FIELDS = ['field1', 'field2'];      // Form → N8N
-const PERSISTENT_FIELDS = ['result1', 'result2']; // Database storage
+const EXPECTED_RESULTS_SCHEMA = ['result1', 'result2']; // Expected N8N outputs
 ```
 
-### N8N Integration (Black Box)
-- App sends payload to N8N with INPUT_FIELDS
-- N8N processes data and updates database
-- N8N sends webhook back to trigger UI updates
-- **Do not modify payload structure**
+### N8N Integration with Run History
+- App creates results record with 'running' status
+- N8N processes data and updates results via webhook
+- Real-time SSE updates notify UI of progress
+- Complete audit trail maintained for all runs
+- **Results stored in dedicated table, not userData**
 
 ### Stripe Integration
 - Local database caches subscription data for performance
@@ -103,11 +104,11 @@ const PERSISTENT_FIELDS = ['result1', 'result2']; // Database storage
 - `src/app/(auth)/` - Login/signup pages
 
 ### Core Integration
-- `src/server/api/routers/internal.ts` - **Main API router** (dynamic field handling)
+- `src/server/api/routers/internal.ts` - **Main API router** (results table operations & dynamic field handling)
+- `src/server/internal-db.ts` - **Database client & results table schema**
 - `src/lib/subscription-service.ts` - **Stripe business logic**
 - `src/lib/subscription-db.ts` - Database operations for Stripe
 - `src/lib/stripe-product-utils.ts` - Product name resolution and feature access
-- `src/server/internal-db.ts` - Database client
 
 ### Stripe Files
 - `src/lib/payments/stripe.ts` - Stripe client
@@ -123,7 +124,7 @@ const PERSISTENT_FIELDS = ['result1', 'result2']; // Database storage
 
 ## Database Schema
 
-### userData Table (Main)
+### userData Table (User Management)
 ```sql
 "UID" VARCHAR PRIMARY KEY              -- User ID from Supabase
 "email" VARCHAR                        -- User email
@@ -137,6 +138,21 @@ const PERSISTENT_FIELDS = ['result1', 'result2']; // Database storage
 -- Plus any dynamic fields added via npm run add-field
 ```
 
+### results Table (N8N Workflow Tracking)
+```sql
+"id" UUID PRIMARY KEY                  -- Unique run identifier
+"user_id" VARCHAR                      -- Foreign key to userData.UID
+"workflow_id" VARCHAR                  -- N8N workflow identifier
+"status" VARCHAR                       -- running, completed, failed, or custom
+"input_data" JSONB                     -- Original input sent to N8N
+"results" JSONB                        -- N8N workflow results
+"expected_results_schema" JSONB        -- Expected output fields
+"credits_used" INTEGER                 -- Credits consumed for this run
+"created_at" TIMESTAMP                 -- Run start time
+"updated_at" TIMESTAMP                 -- Last status update
+"completed_at" TIMESTAMP               -- Run completion time
+```
+
 ## Development Patterns
 
 ### Creating New Pages
@@ -144,10 +160,11 @@ const PERSISTENT_FIELDS = ['result1', 'result2']; // Database storage
 2. **Update field arrays**:
    ```typescript
    const INPUT_FIELDS = ['yourField1', 'yourField2'];
-   const PERSISTENT_FIELDS = ['resultField1', 'resultField2'];
+   const EXPECTED_RESULTS_SCHEMA = ['resultField1', 'resultField2'];
    ```
-3. **Add database columns**: `npm run add-field resultField1` (for each PERSISTENT_FIELD)
+3. **Set workflow ID**: Update `workflow_id` in sendToN8n call
 4. **Customize UI labels and validation**
+5. **Results automatically stored in results table**
 
 ### Adding New Database Fields
 ```bash
@@ -166,8 +183,17 @@ const { data: userData } = api.internal.getUserData.useQuery();
 // Update any fields dynamically
 const { mutate: updateUserData } = api.internal.updateUserData.useMutation();
 
-// Send to N8N (includes usage_credits automatically)
+// Send to N8N with results tracking
 const { mutate: sendToN8n } = api.internal.sendToN8n.useMutation();
+
+// Get workflow run history
+const { data: history } = api.internal.getWorkflowHistory.useQuery();
+
+// Get specific run details
+const { data: runDetails } = api.internal.getRunDetails.useQuery({ runId });
+
+// Delete run history
+const { mutate: deleteRun } = api.internal.deleteRun.useMutation();
 
 // Stripe operations
 const { data: subscription } = api.payments.getCurrentSubscription.useQuery();
@@ -190,16 +216,18 @@ const [inputData, setInputData] = useState<Record<string, string>>(
   }, {} as Record<string, string>)
 );
 
-const [editableValues, setEditableValues] = useState<Record<string, string>>({});
-const [persistentData, setPersistentData] = useState<Record<string, string>>({});
+// Results table state management
+const [currentRunId, setCurrentRunId] = useState<string | null>(null);
+const [lastUpdate, setLastUpdate] = useState<number>(Date.now());
+const [isConnected, setIsConnected] = useState(false);
+
+// Required ref for avoiding stale closures
+const currentRunIdRef = useRef<string | null>(null);
+const refetchHistoryRef = useRef<(() => void) | null>(null);
 
 // Required helper functions
 const updateInputField = (fieldName: string, value: string) => {
   setInputData(prev => ({ ...prev, [fieldName]: value }));
-};
-
-const updateEditableField = (fieldName: string, value: string) => {
-  setEditableValues(prev => ({ ...prev, [fieldName]: value }));
 };
 ```
 
@@ -213,20 +241,26 @@ const updateEditableField = (fieldName: string, value: string) => {
   "user_email": "email", 
   "usage_credits": 1000,
   "data": { ...INPUT_FIELDS },
-  "action": "process"
+  "action": "process",
+  "run_id": "uuid",                    // NEW: Results table reference
+  "workflow_id": "workflow_name",      // NEW: Workflow identifier
+  "expected_results_schema": ["field1", "field2"] // NEW: Expected outputs
 }
 
-// N8N response (required format)
+// N8N webhook response (required format)
 {
-  "user_id": "uuid",
-  "updatedFields": ["field1", "field2"]
+  "run_id": "uuid",                    // NEW: Results table reference
+  "status": "completed",               // NEW: Run status
+  "results": { "field1": "value1" },   // NEW: Actual results
+  "credits_used": 10                   // NEW: Credit consumption
 }
 ```
 
 ### Core Files (Modify Carefully)
-- `src/server/api/routers/internal.ts` - Dynamic SQL generation
+- `src/server/api/routers/internal.ts` - **Results table operations & dynamic SQL generation**
+- `src/server/internal-db.ts` - **Results table schema & database setup**
 - `src/lib/sse-utils.ts` - Global connection management
-- `src/app/api/webhooks/internal-updated/route.ts` - Webhook handler
+- `src/app/api/webhooks/internal-updated/route.ts` - **N8N results webhook handler**
 - `src/app/api/stream/user-updates/route.ts` - SSE endpoint
 - `src/app/api/stripe/webhook/route.ts` - **Stripe webhook handler** (handles credit allocation)
 
@@ -235,6 +269,8 @@ const updateEditableField = (fieldName: string, value: string) => {
 - Always use parameterized queries for dynamic fields
 - Credit operations use database transactions
 - **Stripe webhooks write directly to userData table**
+- **N8N results stored in results table with UUID primary keys**
+- **Results table ensures referential integrity with userData.UID**
 
 ## Real-Time Updates
 
@@ -250,6 +286,13 @@ useEffect(() => {
     if (data.type === "userData-updated") {
       setLastUpdate(data.timestamp);
       void utils.internal.getUserData.invalidate();
+    }
+    // NEW: Results table updates
+    if (data.type === "results-updated") {
+      if (data.runId === currentRunIdRef.current) {
+        // Handle current run updates
+        refetchHistoryRef.current?.();
+      }
     }
   };
   
@@ -275,19 +318,25 @@ const featureMap: Record<string, string[]> = {
 
 ## Common Tasks
 
-### Add New Field Type
+### Add New Workflow
+1. Copy n8n-demo structure to new page
+2. Update `INPUT_FIELDS` and `EXPECTED_RESULTS_SCHEMA` arrays
+3. Set unique `workflow_id` in sendToN8n call
+4. Test N8N integration with results table
+
+### Add New Field Type (for userData)
 1. `npm run add-field fieldName`
-2. Add to PERSISTENT_FIELDS array in component
-3. Update UI labels in formatFieldName function
+2. Update UI labels in formatFieldName function
+3. **Note**: N8N results use JSONB storage, no schema changes needed
 
 ### Add New Feature Gate
 1. Update featureMap in `src/lib/stripe-product-utils.ts`
 2. Use `api.payments.hasFeature.useQuery()` in component
 
-### Add New Page
-1. Copy n8n-demo structure
-2. Update field arrays
-3. Add database columns for persistent fields
-4. Test N8N integration
+### Debug N8N Integration
+1. Check results table for run history: `api.internal.getWorkflowHistory.useQuery()`
+2. Inspect specific run: `api.internal.getRunDetails.useQuery({ runId })`
+3. Monitor SSE updates for real-time status
+4. Verify webhook payload matches expected format
 
-This template enables rapid page creation by copying proven patterns and updating field configurations.
+This template enables rapid workflow creation with complete audit trails and real-time tracking.

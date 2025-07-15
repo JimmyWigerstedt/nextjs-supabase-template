@@ -1,17 +1,18 @@
 // ==========================================
-// TEMPLATE: Dynamic Webhook Handler  
+// TEMPLATE: N8N Results Webhook Handler  
 // ==========================================
-// This webhook processes n8n completion notifications.
+// This webhook processes N8N workflow completion notifications.
 // The handler automatically:
-// - Accepts any field names in updatedFields array
-// - Fetches current database values for those fields
+// - Updates results table with workflow status and results
+// - Handles credit deduction with transactional safety
 // - Sends real-time updates to connected users
-// - Handles offline users with pending update storage
+// - Maintains complete audit trail for all workflow runs
 //
 // INTEGRATION REQUIREMENTS:
-// - n8n must send user_id matching the original request
-// - updatedFields must be array of valid database column names
-// - Handler fetches and forwards current database values
+// - N8N must send run_id matching the original request
+// - Status field indicates workflow completion state
+// - Results field contains JSONB workflow output
+// - Credits_used field tracks computational costs
 // ==========================================
 
 import type { NextRequest } from "next/server";

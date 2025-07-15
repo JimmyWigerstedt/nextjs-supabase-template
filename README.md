@@ -1,8 +1,8 @@
 # Next.js + tRPC + Prisma + Supabase + N8N Template
 
-**A production-ready template for building custom data management applications with real-time N8N integration.**
+**A production-ready template for building custom data management applications with real-time N8N integration and complete workflow tracking.**
 
-This template provides **reusable patterns** and **copy-paste components** that enable rapid development of custom data management pages with N8N workflow integration, real-time updates, and full type safety.
+This template provides **reusable patterns** and **copy-paste components** that enable rapid development of custom data management pages with N8N workflow integration, run history tracking, real-time updates, and full type safety.
 
 ## 🎯 **Template Philosophy**
 
@@ -11,6 +11,7 @@ This is a **starting point template** designed for customization. The architectu
 - **Build custom pages** by copying proven patterns
 - **Add any fields** without backend code changes  
 - **Integrate with N8N** using standardized payloads
+- **Track workflow runs** with complete audit trails
 - **Get real-time updates** automatically via webhooks
 - **Maintain type safety** across the entire stack
 
@@ -51,45 +52,73 @@ NC_SCHEMA="your-nocodb-schema-name"
 
 ### E-commerce Order Management
 ```typescript
-const DEVELOPMENT_FIELDS = [
+const INPUT_FIELDS = [
   'customerEmail',
   'productSku',
   'orderQuantity', 
   'shippingAddress',
   'paymentStatus'
 ];
+
+const EXPECTED_RESULTS_SCHEMA = [
+  'orderNumber',
+  'trackingNumber',
+  'estimatedDelivery',
+  'processingStatus'
+];
 ```
 
 ### Customer Support System
 ```typescript
-const DEVELOPMENT_FIELDS = [
+const INPUT_FIELDS = [
   'ticketSubject',
   'issueCategory',
   'priorityLevel',
   'customerMessage',
   'assignedAgent'
 ];
+
+const EXPECTED_RESULTS_SCHEMA = [
+  'ticketNumber',
+  'resolution',
+  'escalationLevel',
+  'responseTime'
+];
 ```
 
 ### Content Management
 ```typescript
-const DEVELOPMENT_FIELDS = [
+const INPUT_FIELDS = [
   'contentTitle',
   'contentType',
   'publishDate',
   'authorName',
   'contentStatus'
 ];
+
+const EXPECTED_RESULTS_SCHEMA = [
+  'contentId',
+  'publishedUrl',
+  'seoScore',
+  'approvalStatus'
+];
 ```
 
 ### CRM Lead Tracking
 ```typescript
-const DEVELOPMENT_FIELDS = [
+const INPUT_FIELDS = [
   'leadSource',
   'companyName',
   'contactEmail',
   'leadScore',
   'salesStage'
+];
+
+const EXPECTED_RESULTS_SCHEMA = [
+  'leadId',
+  'qualificationScore',
+  'nextAction',
+  'assignedSalesRep'
 ];
 ```
 
@@ -119,17 +148,18 @@ const DEVELOPMENT_FIELDS = [
 
 ### Creating New Pages
 ```bash
-# 1. Add your database fields
-npm run add-field customerName
-npm run add-field orderStatus
-
-# 2. Copy the template component
+# 1. Copy the template component
 cp src/app/n8n-demo/client-page.tsx src/app/your-page/client-page.tsx
 
-# 3. Update the DEVELOPMENT_FIELDS array
-const DEVELOPMENT_FIELDS = ['customerName', 'orderStatus'];
+# 2. Update the field arrays
+const INPUT_FIELDS = ['customerName', 'orderStatus'];
+const EXPECTED_RESULTS_SCHEMA = ['orderNumber', 'trackingCode'];
+
+# 3. Set your workflow ID
+const WORKFLOW_ID = 'your-workflow-name';
 
 # 4. Customize the UI as needed
+# Note: Results are automatically stored in results table
 ```
 
 ### N8N Workflow Pattern
@@ -138,17 +168,26 @@ const DEVELOPMENT_FIELDS = ['customerName', 'orderStatus'];
 {
   "user_id": "user-uuid",
   "user_email": "user@example.com", 
+  "usage_credits": 1000,
   "data": {
     "customerName": "John Doe",
     "orderStatus": "pending"
   },
-  "action": "process"
+  "action": "process",
+  "run_id": "run-uuid",
+  "workflow_id": "order-processing",
+  "expected_results_schema": ["orderNumber", "trackingCode"]
 }
 
-// Your workflow sends back:
+// Your workflow sends back via webhook:
 {
-  "user_id": "user-uuid",
-  "updatedFields": ["customerName", "orderStatus"]
+  "run_id": "run-uuid",
+  "status": "completed",
+  "results": {
+    "orderNumber": "ORD-12345",
+    "trackingCode": "TRACK-67890"
+  },
+  "credits_used": 10
 }
 ```
 
@@ -157,6 +196,7 @@ const DEVELOPMENT_FIELDS = ['customerName', 'orderStatus'];
 - **⚡ Rapid Development:** Create new pages in minutes, not hours
 - **🔒 Type Safety:** Full TypeScript coverage from database to UI
 - **📡 Real-time Updates:** Automatic UI refresh when N8N workflows complete
+- **📊 Run History:** Complete audit trail of all workflow executions
 - **🔄 Dynamic Fields:** Add new fields without backend code changes
 - **🎨 Customizable:** Modify UI while keeping proven patterns
 - **🛡️ Production Ready:** Security, validation, and error handling included
@@ -181,22 +221,23 @@ See examples in `src/app/prefetch/`, `src/app/server-only-fetch/`, and `src/app/
 
 ## 🔧 **Development Workflow**
 
-1. **Plan your fields:** What data does your use case need?
-2. **Add to database:** Use `npm run add-field fieldName` for each field
-3. **Copy template:** Use `n8n-demo` as your reference implementation
-4. **Customize UI:** Update field names and styling to match your needs
-5. **Build N8N workflow:** Create workflows using the documented patterns
-6. **Test integration:** Verify data flow and real-time updates
+1. **Plan your fields:** What input data and expected results does your use case need?
+2. **Copy template:** Use `n8n-demo` as your reference implementation
+3. **Update field arrays:** Set `INPUT_FIELDS` and `EXPECTED_RESULTS_SCHEMA`
+4. **Set workflow ID:** Define unique identifier for your N8N workflow
+5. **Customize UI:** Update field names and styling to match your needs
+6. **Build N8N workflow:** Create workflows using the documented patterns
+7. **Test integration:** Verify data flow, run history, and real-time updates
 
 ## 🏆 **Template Success Stories**
 
 This template enables you to build:
-- **E-commerce order processing** systems
-- **Customer support ticket** management
-- **Content management** workflows
-- **CRM lead tracking** systems
-- **Financial transaction** processing
-- **Inventory management** systems
+- **E-commerce order processing** systems with complete order tracking
+- **Customer support ticket** management with response history
+- **Content management** workflows with approval tracking
+- **CRM lead tracking** systems with interaction history
+- **Financial transaction** processing with audit trails
+- **Inventory management** systems with stock movement tracking
 
 ## 📞 **Support & Community**
 
