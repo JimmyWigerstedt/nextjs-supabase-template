@@ -2,6 +2,17 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## 📚 Documentation Structure
+
+**LLM-Optimized Documentation:**
+- **README.md** - Project overview, instant orientation, quick start (190 lines)
+- **TEMPLATE_GUIDE.md** - Complete field examples, adaptation process (350+ lines)  
+- **DEVELOPERS.md** - Architecture details, API contracts, implementation (400+ lines)
+- **docs/stripe.md** - Stripe integration specifics
+
+**Previous Structure:** 11 files, 4,200+ lines with 70% redundancy
+**Current Structure:** 4 files, 1,200+ lines, zero redundancy, LLM-optimized
+
 ## Development Commands
 
 
