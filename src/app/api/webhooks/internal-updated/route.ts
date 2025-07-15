@@ -82,14 +82,14 @@ export async function POST(request: NextRequest) {
         // Calculate duration and update results record
         const updateQuery = `
           UPDATE "${env.NC_SCHEMA}"."results" 
-          SET "status" = $1, 
-              "completed_at" = CASE WHEN $1 IN ('completed', 'failed') THEN CURRENT_TIMESTAMP ELSE "completed_at" END,
-              "duration_ms" = CASE WHEN $1 IN ('completed', 'failed') THEN 
-                EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - "created_at")) * 1000 
+          SET "status" = $1::VARCHAR, 
+              "completed_at" = CASE WHEN $1::VARCHAR IN ('completed', 'failed') THEN CURRENT_TIMESTAMP ELSE "completed_at" END,
+              "duration_ms" = CASE WHEN $1::VARCHAR IN ('completed', 'failed') THEN 
+                EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - "created_at"))::INTEGER * 1000 
                 ELSE "duration_ms" END,
-              "credits_consumed" = COALESCE($2, "credits_consumed"),
+              "credits_consumed" = COALESCE($2::INTEGER, "credits_consumed"),
               "output_data" = COALESCE($3::jsonb, "output_data")
-          WHERE "id" = $4
+          WHERE "id" = $4::UUID
           RETURNING "user_id", "workflow_id"
         `;
         

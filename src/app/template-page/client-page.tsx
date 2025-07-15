@@ -183,6 +183,23 @@ export function TemplatePageClient() {
       { enabled: !!selectedRunId }
     );
 
+  // Delete run mutation
+  const { mutate: deleteRun, isPending: isDeletingRun } = 
+    clientApi.internal.deleteRun.useMutation({
+      onSuccess: (data) => {
+        toast.success("Order processing run deleted");
+        // Close details if we're deleting the selected run
+        if (selectedRunId === data.id) {
+          setSelectedRunId(null);
+        }
+        // Refresh history
+        void refetchHistory();
+      },
+      onError: (error) => {
+        toast.error(`Failed to delete run: ${error.message}`);
+      },
+    });
+
   // Ref for refetchHistory to avoid stale closures
   const refetchHistoryRef = useRef(refetchHistory);
 
@@ -512,15 +529,14 @@ export function TemplatePageClient() {
                   return (
                     <div key={run.id} className="space-y-2">
                       <div 
-                        className={`p-3 border rounded-lg cursor-pointer transition-colors ${
+                        className={`p-3 border rounded-lg transition-colors ${
                           isSelected ? 'border-blue-500 bg-blue-50' : 
                           isCurrentRun ? 'border-orange-500 bg-orange-50' : 
                           'hover:border-gray-300'
                         }`}
-                        onClick={() => setSelectedRunId(isSelected ? null : run.id)}
                       >
                         <div className="flex items-center justify-between">
-                          <div className="flex items-center space-x-3">
+                          <div className="flex items-center space-x-3 flex-1 cursor-pointer" onClick={() => setSelectedRunId(isSelected ? null : run.id)}>
                             <div className={`w-3 h-3 rounded-full ${
                               run.status === 'completed' ? 'bg-green-500' :
                               run.status === 'failed' ? 'bg-red-500' :
@@ -537,16 +553,33 @@ export function TemplatePageClient() {
                               </div>
                             </div>
                           </div>
-                          <div className="text-right">
-                            {run.duration_ms && (
-                              <div className="text-xs text-muted-foreground">
-                                {(run.duration_ms / 1000).toFixed(1)}s
-                              </div>
-                            )}
-                            {run.credits_consumed > 0 && (
-                              <div className="text-xs text-orange-600">
-                                -{run.credits_consumed} credits
-                              </div>
+                          <div className="flex items-center space-x-2">
+                            <div className="text-right">
+                              {run.duration_ms && (
+                                <div className="text-xs text-muted-foreground">
+                                  {(run.duration_ms / 1000).toFixed(1)}s
+                                </div>
+                              )}
+                              {run.credits_consumed > 0 && (
+                                <div className="text-xs text-orange-600">
+                                  -{run.credits_consumed} credits
+                                </div>
+                              )}
+                            </div>
+                            {!isCurrentRun && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-6 w-6 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  deleteRun({ id: run.id });
+                                }}
+                                disabled={isDeletingRun}
+                                title="Delete order processing run"
+                              >
+                                ×
+                              </Button>
                             )}
                           </div>
                         </div>

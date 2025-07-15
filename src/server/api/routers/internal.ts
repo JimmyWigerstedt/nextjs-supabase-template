@@ -440,4 +440,29 @@ export const internalRouter = createTRPCRouter({
       }
     }),
 
+  deleteRun: authorizedProcedure
+    .input(z.object({ id: z.string().uuid() }))
+    .mutation(async ({ input, ctx }) => {
+      const client = await internalDb.connect();
+      try {
+        const result = await client.query(
+          `DELETE FROM "${env.NC_SCHEMA}"."results" WHERE "id" = $1 AND "user_id" = $2 RETURNING "id"`,
+          [input.id, ctx.supabaseUser!.id]
+        );
+        
+        if (result.rows.length === 0) {
+          throw new Error('Results record not found or access denied');
+        }
+        
+        console.log(`[deleteRun] Deleted results record ${input.id} for user ${ctx.supabaseUser!.id}`);
+        
+        return { success: true, id: input.id };
+      } catch (error) {
+        console.error('Failed to delete run:', error);
+        throw new Error('Failed to delete run');
+      } finally {
+        client.release();
+      }
+    }),
+
 }); 
