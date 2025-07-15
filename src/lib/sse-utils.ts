@@ -4,9 +4,14 @@ declare global {
   var activeSSEConnections: Map<string, ReadableStreamDefaultController> | undefined;
   // eslint-disable-next-line no-var
   var pendingUpdates: Map<string, { 
-    updatedFields: string[]; 
-    fetchedValues: Record<string, string>;
+    type: string;
+    id?: string;
+    status?: string;
+    workflow_id?: string;
     timestamp: string;
+    // Legacy support for old format
+    updatedFields?: string[]; 
+    fetchedValues?: Record<string, string>;
   }> | undefined;
 }
 
@@ -18,9 +23,14 @@ global.pendingUpdates = global.pendingUpdates ?? new Map();
 export function sendSSEUpdateToUser(
   userId: string, 
   updateData: {
-    updatedFields: string[];
-    fetchedValues: Record<string, string>;
+    type: string;
+    id?: string;
+    status?: string;
+    workflow_id?: string;
     timestamp: string;
+    // Legacy support for old format
+    updatedFields?: string[];
+    fetchedValues?: Record<string, string>;
   }
 ): boolean {
   const LOG_PREFIX = "[sse:send-update]";
@@ -28,15 +38,24 @@ export function sendSSEUpdateToUser(
   
   if (controller) {
     try {
-      const message = `data: ${JSON.stringify({
-        type: "userData-updated",
+      // Support both new results-focused format and legacy userData format
+      const messageData = updateData.type.startsWith("result-") ? {
+        type: updateData.type,
+        id: updateData.id,
+        status: updateData.status,
+        workflow_id: updateData.workflow_id,
+        timestamp: updateData.timestamp,
+      } : {
+        type: "userData-updated", // Legacy format
         updatedFields: updateData.updatedFields,
         fetchedValues: updateData.fetchedValues,
         timestamp: updateData.timestamp,
-      })}\n\n`;
+      };
+      
+      const message = `data: ${JSON.stringify(messageData)}\n\n`;
       
       controller.enqueue(new TextEncoder().encode(message));
-      console.info(`${LOG_PREFIX} Real-time update sent to user ${userId}`);
+      console.info(`${LOG_PREFIX} Real-time update sent to user ${userId}:`, updateData.type);
       return true;
     } catch (error) {
       console.error(`${LOG_PREFIX} Failed to send update to user ${userId}:`, error);
@@ -57,7 +76,16 @@ export function getActiveSSEConnections(): Map<string, ReadableStreamDefaultCont
 }
 
 // Helper to get pending updates (for management)
-export function getPendingUpdates(): Map<string, { updatedFields: string[]; fetchedValues: Record<string, string>; timestamp: string; }> {
+export function getPendingUpdates(): Map<string, { 
+  type: string;
+  id?: string;
+  status?: string;
+  workflow_id?: string;
+  timestamp: string;
+  // Legacy support for old format
+  updatedFields?: string[]; 
+  fetchedValues?: Record<string, string>;
+}> {
   // eslint-disable-next-line @typescript-eslint/no-unsafe-return
   return global.pendingUpdates ?? new Map();
 } 
