@@ -6,7 +6,7 @@
 // 
 // This template demonstrates the field-driven architecture pattern using the useN8nWorkflow hook:
 // - INPUT_FIELDS: Form data sent to N8N (no database persistence)
-// - PERSISTENT_FIELDS: Store N8N results or user data (require database columns)
+// - PERSISTENT_FIELDS: Fields from results table output_data that can be displayed and edited
 // - Real-time updates via SSE connection
 // - Complete N8N integration workflow
 // ==========================================
@@ -29,10 +29,11 @@ const INPUT_FIELDS = [
   'urgencyLevel'        // Priority level for processing
 ];
 
-// Persistent fields: Store N8N results and user data (require database columns)
+// Persistent fields: Fields from results table output_data that can be displayed and edited
 const PERSISTENT_FIELDS = [
   'aiRecommendation',  // N8N analysis result (read-only)
-  'finalDecision'      // User can edit this field and save back
+  'confidence',        // Confidence score from N8N (can be edited)
+  'reasoning'          // Reasoning explanation from N8N (can be edited)
 ];
 
 // Define what output structure this template expects from N8N
@@ -96,6 +97,11 @@ export function TemplatePageClient() {
   // ==========================================
 
   const formatFieldName = (fieldName: string): string => {
+    // Handle special cases for better formatting
+    if (fieldName === 'confidence') return 'Confidence Score';
+    if (fieldName === 'reasoning') return 'Reasoning';
+    if (fieldName === 'aiRecommendation') return 'AI Recommendation';
+    
     return fieldName
       .replace(/([A-Z])/g, ' $1')
       .replace(/^./, str => str.toUpperCase());
@@ -192,11 +198,16 @@ export function TemplatePageClient() {
                       <div className="flex gap-2">
                         <Input
                           id={field}
-                          type="text"
+                          type={field === 'confidence' ? 'number' : 'text'}
                           value={editableValues[field] ?? ''}
                           onChange={(e) => updateEditableField(field, e.target.value)}
                           className={highlightedFields.has(field) ? 'ring-2 ring-blue-500' : ''}
-                          placeholder={field === 'aiRecommendation' ? 'AI analysis will appear here' : 'Enter your decision'}
+                          placeholder={
+                            field === 'aiRecommendation' ? 'AI analysis will appear here' :
+                            field === 'confidence' ? 'Confidence score (0-100)' :
+                            field === 'reasoning' ? 'Reasoning explanation' : 
+                            'Enter value'
+                          }
                         />
                         <Button
                           onClick={() => handleSaveField(field)}

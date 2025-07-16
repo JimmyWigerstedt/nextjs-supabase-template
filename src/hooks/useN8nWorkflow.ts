@@ -19,7 +19,7 @@ import { toast } from "sonner";
  * 
  * 📋 CONFIGURATION:
  * - inputFields: Form fields sent to N8N (cleared after submission)
- * - persistentFields: Database fields that persist and can be edited
+ * - persistentFields: Results table output_data fields that can be displayed and edited
  * - workflowId: Unique identifier for workflow tracking
  * - expectedResultsSchema: Expected output structure from N8N
  * 
