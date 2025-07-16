@@ -80,6 +80,7 @@ export function useN8nWorkflow({
   
   // Refs for SSE callback to avoid stale closures
   const currentRunIdRef = useRef<string | null>(null);
+  const currentRunStatusRef = useRef<string>('idle');
 
   // ==========================================
   // Helper Functions
@@ -109,27 +110,41 @@ export function useN8nWorkflow({
     isLoading: isLoadingData,
   } = clientApi.internal.getUserData.useQuery();
 
-  const { mutate: updateUserData } = 
-    clientApi.internal.updateUserData.useMutation({
+  // Get latest results for this workflow
+  const {
+    data: latestResults,
+    refetch: refetchLatestResults,
+    isLoading: isLoadingLatestResults,
+  } = clientApi.internal.getLatestResults.useQuery({
+    workflow_id: workflowId,
+  });
+
+  // Update results output data
+  const { mutate: updateResultsOutputData } = 
+    clientApi.internal.updateResultsOutputData.useMutation({
       onSuccess: (data) => {
-        toast.success("Field updated successfully!");
-        void refetchUserData();
+        toast.success("Results updated successfully!");
+        void refetchLatestResults();
+        void refetchWorkflowHistory();
         
-        // Update persistent data state with proper type conversion
-        const updatedData: Record<string, string> = {};
-        Object.entries(data as Record<string, unknown>).forEach(([key, value]) => {
-          updatedData[key] = String(value ?? '');
-        });
-        
-        setPersistentData((prev: Record<string, string>) => {
-          const newData: Record<string, string> = { ...prev };
-          Object.entries(updatedData).forEach(([key, value]) => {
-            if (persistentFields.includes(key)) {
-              newData[key] = value;
-            }
+        // Update persistent data state with output_data
+        if (data.output_data) {
+          const outputData = data.output_data as Record<string, unknown>;
+          const updatedData: Record<string, string> = {};
+          Object.entries(outputData).forEach(([key, value]) => {
+            updatedData[key] = String(value ?? '');
           });
-          return newData;
-        });
+          
+          setPersistentData((prev: Record<string, string>) => {
+            const newData: Record<string, string> = { ...prev };
+            Object.entries(updatedData).forEach(([key, value]) => {
+              if (persistentFields.includes(key)) {
+                newData[key] = value;
+              }
+            });
+            return newData;
+          });
+        }
         
         // Clear saving state
         setSavingFields(new Set());
@@ -148,6 +163,7 @@ export function useN8nWorkflow({
           setCurrentRunId(result.results_id);
           setCurrentRunStatus('processing');
           currentRunIdRef.current = result.results_id;
+          currentRunStatusRef.current = 'processing';
           
           // Clear input form after successful submission
           setInputData(
@@ -159,6 +175,7 @@ export function useN8nWorkflow({
           
           // Refetch workflow history to show new run
           void refetchWorkflowHistory();
+          void refetchLatestResults();
         } else {
           toast.error("Failed to send request to N8N");
         }
@@ -237,15 +254,20 @@ export function useN8nWorkflow({
         }
         
         // Handle results updates (new format)
-        if (data.type === "result-updated" && data.id === currentRunIdRef.current) {
+        if ((data.type === "result-updated" || data.type === "result-done" || data.type === "result-failed") && 
+            data.id === currentRunIdRef.current) {
           if (data.status) {
             setCurrentRunStatus(data.status);
+            currentRunStatusRef.current = data.status;
           }
           void refetchWorkflowHistory();
+          void refetchLatestResults();
           
           if (data.status === 'completed' || data.status === 'failed') {
             setCurrentRunId(null);
             currentRunIdRef.current = null;
+            setCurrentRunStatus('idle');
+            currentRunStatusRef.current = 'idle';
           }
         }
         
@@ -261,26 +283,44 @@ export function useN8nWorkflow({
     return () => {
       eventSource.close();
     };
-  }, [utils, workflowId, refetchWorkflowHistory]);
+  }, [utils, workflowId, refetchWorkflowHistory, refetchLatestResults]);
 
   // ==========================================
   // Data Initialization
   // ==========================================
 
   useEffect(() => {
-    if (userData) {
-      // Initialize persistent data from userData
+    if (latestResults?.output_data) {
+      // Initialize persistent data from latest results output_data
+      const outputData = latestResults.output_data as Record<string, unknown>;
       const initialPersistentData: Record<string, string> = {};
       persistentFields.forEach(field => {
-        const value = userData[field];
+        const value = outputData[field];
         initialPersistentData[field] = String(value ?? '');
       });
       setPersistentData(initialPersistentData);
       
       // Initialize editable values
       setEditableValues(initialPersistentData);
+    } else {
+      // Initialize empty values if no results yet
+      const emptyData: Record<string, string> = {};
+      persistentFields.forEach(field => {
+        emptyData[field] = '';
+      });
+      setPersistentData(emptyData);
+      setEditableValues(emptyData);
     }
-  }, [userData, persistentFields]);
+  }, [latestResults, persistentFields]);
+
+  // Keep refs in sync with state
+  useEffect(() => {
+    currentRunIdRef.current = currentRunId;
+  }, [currentRunId]);
+
+  useEffect(() => {
+    currentRunStatusRef.current = currentRunStatus;
+  }, [currentRunStatus]);
 
   // ==========================================
   // Action Handlers
@@ -300,8 +340,24 @@ export function useN8nWorkflow({
   };
 
   const handleSaveField = (fieldName: string) => {
+    if (!latestResults?.id) {
+      toast.error("No results to update. Please run the workflow first.");
+      return;
+    }
+    
     setSavingFields(prev => new Set(prev).add(fieldName));
-    updateUserData({ [fieldName]: editableValues[fieldName] });
+    
+    // Get current output_data and update the specific field
+    const currentOutputData = latestResults.output_data as Record<string, unknown> || {};
+    const updatedOutputData = {
+      ...currentOutputData,
+      [fieldName]: editableValues[fieldName]
+    };
+    
+    updateResultsOutputData({
+      results_id: latestResults.id,
+      output_data: updatedOutputData
+    });
   };
 
   const handleSelectRun = (runId: string) => {
@@ -334,11 +390,13 @@ export function useN8nWorkflow({
     
     // Data
     userData,
+    latestResults,
     workflowHistory,
     runDetails,
     
     // Loading states
     isLoadingData,
+    isLoadingLatestResults,
     isLoadingHistory,
     isLoadingRunDetails,
     isSendingToN8n,
@@ -358,6 +416,7 @@ export function useN8nWorkflow({
     
     // Utils
     refetchUserData,
+    refetchLatestResults,
     refetchWorkflowHistory,
     refetchRunDetails,
   };

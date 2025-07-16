@@ -128,7 +128,7 @@ export function AppHeader({
   const navigationLinks = [
     { href: "/dashboard", label: "Dashboard" },
     { href: "/pricing", label: "Pricing" },
-    { href: "/n8n-demo", label: "N8N Demo" },
+    { href: "/template-page", label: "Template Demo" },
   ];
 
   return (

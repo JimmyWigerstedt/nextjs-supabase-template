@@ -65,11 +65,13 @@ export function TemplatePageClient() {
     
     // Data
     userData,
+    latestResults,
     workflowHistory,
     runDetails,
     
     // Loading states
     isLoadingData,
+    isLoadingLatestResults,
     isLoadingHistory,
     isLoadingRunDetails,
     isSendingToN8n,
@@ -176,7 +178,7 @@ export function TemplatePageClient() {
               <CardTitle>Results & Recommendations</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              {isLoadingData ? (
+              {isLoadingData || isLoadingLatestResults ? (
                 <div className="space-y-4">
                   <div className="h-4 bg-gray-200 rounded animate-pulse" />
                   <div className="h-4 bg-gray-200 rounded animate-pulse" />
@@ -359,6 +361,12 @@ export function TemplatePageClient() {
                   <h4 className="font-medium">User Data:</h4>
                   <pre className="bg-gray-100 p-2 rounded text-sm overflow-x-auto">
                     {JSON.stringify(userData, null, 2)}
+                  </pre>
+                </div>
+                <div>
+                  <h4 className="font-medium">Latest Results:</h4>
+                  <pre className="bg-gray-100 p-2 rounded text-sm overflow-x-auto">
+                    {JSON.stringify(latestResults, null, 2)}
                   </pre>
                 </div>
                 <div>
