@@ -35,6 +35,7 @@ export function AppHeader({
 }: AppHeaderProps) {
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
   const router = useRouter();
   const utils = clientApi.useUtils();
 
@@ -54,10 +55,14 @@ export function AppHeader({
 
   // Check if user is authenticated
   const isAuthenticated = userData?.UID ? true : false;
+  
+  // Show unauthenticated state immediately when logging out
+  const shouldShowUnauthenticated = isLoggingOut || !isAuthenticated;
 
   // Handle logout
   const handleLogout = async () => {
     try {
+      setIsLoggingOut(true);
       const supabase = supabaseBrowser();
       await supabase.auth.signOut();
       await utils.invalidate();
@@ -67,6 +72,7 @@ export function AppHeader({
     } catch (error) {
       console.error("Logout error:", error);
       toast.error("Error logging out");
+      setIsLoggingOut(false);
     }
   };
 
@@ -176,7 +182,7 @@ export function AppHeader({
             {isLoadingUserData ? (
               /* Show skeleton while loading */
               <UserDataSkeleton />
-            ) : isAuthenticated ? (
+            ) : !shouldShowUnauthenticated ? (
               <>
                 {/* Credits display - clickable to go to pricing */}
                 <Link href="/pricing">
@@ -292,7 +298,7 @@ export function AppHeader({
               ))}
               
               {/* Mobile user info */}
-              {isAuthenticated && (
+              {!shouldShowUnauthenticated && (
                 <div className="px-3 py-2 space-y-2">
                   <Link href="/pricing" onClick={() => setIsMobileMenuOpen(false)}>
                     <div className="flex items-center space-x-2 px-3 py-1 bg-blue-50 rounded-full border cursor-pointer hover:bg-blue-100 transition-colors">

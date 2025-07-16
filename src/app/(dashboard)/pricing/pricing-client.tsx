@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Check, Crown, ChevronDown } from 'lucide-react';
+import { Check, ChevronDown } from 'lucide-react';
 import { BillingToggle, type BillingInterval } from '~/components/ui/billing-toggle';
 import { Button } from '~/components/ui/button';
 import { ArrowRight, Loader2 } from 'lucide-react';
