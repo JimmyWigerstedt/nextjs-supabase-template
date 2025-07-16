@@ -1,5 +1,5 @@
-import { N8nDemoClient } from "./client-page";
-import { AuthPageWrapper } from "./auth-wrapper";
+import { N8nDemoClient } from "~/app/n8n-demo/client-page";
+import { AuthPageWrapper } from "~/app/n8n-demo/auth-wrapper";
 
 export default async function N8nDemoPage() {
   return (

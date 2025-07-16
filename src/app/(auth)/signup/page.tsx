@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { SignupClientPage } from "./client-page";
+import { SignupClientPage } from "~/app/(auth)/signup/client-page";
 import { supabaseServer } from "~/util/supabase/server";
 
 export default async function SignupPage() {

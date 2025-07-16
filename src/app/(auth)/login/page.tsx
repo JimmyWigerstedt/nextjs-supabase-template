@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { supabaseServer } from "~/util/supabase/server";
-import { LoginClientPage } from "./client-page";
+import { LoginClientPage } from "~/app/(auth)/login/client-page";
 
 export default async function LoginPage() {
   const supabase = supabaseServer();

@@ -132,6 +132,7 @@ const EXPECTED_RESULTS_SCHEMA = ['result1', 'result2']; // Expected N8N outputs
 - `src/components/layout/AppHeader.tsx` - Global header
 - `src/lib/sse-utils.ts` - Real-time updates
 - `src/app/api/` - Webhook handlers and SSE endpoints
+- `src/hooks/useN8nWorkflow.ts` - **Centralized N8N workflow state management hook**
 
 ## Database Schema
 
@@ -166,16 +167,18 @@ const EXPECTED_RESULTS_SCHEMA = ['result1', 'result2']; // Expected N8N outputs
 
 ## Development Patterns
 
-### Creating New Pages
+### Creating New Pages (Optimized Hook Pattern)
 1. **Copy template**: `cp src/app/n8n-demo/client-page.tsx src/app/your-page/client-page.tsx`
-2. **Update field arrays**:
+2. **Update configuration arrays**:
    ```typescript
    const INPUT_FIELDS = ['yourField1', 'yourField2'];
-   const EXPECTED_RESULTS_SCHEMA = ['resultField1', 'resultField2'];
+   const PERSISTENT_FIELDS = ['resultField1', 'resultField2'];  
+   const EXPECTED_RESULTS_SCHEMA = { resultField1: 'string', resultField2: 'number' };
+   const WORKFLOW_ID = 'your-workflow-name';
    ```
-3. **Set workflow ID**: Update `workflow_id` in sendToN8n call
-4. **Customize UI labels and validation**
-5. **Results automatically stored in results table**
+3. **Hook integration**: useN8nWorkflow handles all state management automatically
+4. **Customize UI**: Update field labels, validation, and component styling
+5. **Results automatically stored**: Complete audit trail with real-time updates
 
 ### Adding New Database Fields
 ```bash
@@ -217,29 +220,55 @@ const { data: hasFeature } = api.payments.hasFeature.useQuery({
 });
 ```
 
-### Component State Pattern (Copy Exactly)
+### useN8nWorkflow Hook Pattern (Recommended)
 ```typescript
-// Required state for template components
+// Import the centralized hook
+import { useN8nWorkflow } from "~/hooks/useN8nWorkflow";
+
+// Use the hook in your component
+const {
+  // State
+  inputData,
+  persistentData,
+  editableValues,
+  savingFields,
+  isConnected,
+  currentRunId,
+  currentRunStatus,
+  
+  // Data
+  userData,
+  workflowHistory,
+  runDetails,
+  
+  // Loading states
+  isLoadingData,
+  isSendingToN8n,
+  
+  // Actions
+  updateInputField,
+  handleSendToN8n,
+  handleSaveField,
+  handleSelectRun,
+  handleDeleteRun,
+} = useN8nWorkflow({
+  inputFields: INPUT_FIELDS,
+  persistentFields: PERSISTENT_FIELDS,
+  workflowId: WORKFLOW_ID,
+  expectedResultsSchema: EXPECTED_RESULTS_SCHEMA,
+});
+```
+
+### Legacy Component State Pattern (Deprecated)
+```typescript
+// ⚠️ DEPRECATED: Use useN8nWorkflow hook instead
+// This pattern is maintained for reference only
 const [inputData, setInputData] = useState<Record<string, string>>(
   INPUT_FIELDS.reduce((acc, field) => {
     acc[field] = "";
     return acc;
   }, {} as Record<string, string>)
 );
-
-// Results table state management
-const [currentRunId, setCurrentRunId] = useState<string | null>(null);
-const [lastUpdate, setLastUpdate] = useState<number>(Date.now());
-const [isConnected, setIsConnected] = useState(false);
-
-// Required ref for avoiding stale closures
-const currentRunIdRef = useRef<string | null>(null);
-const refetchHistoryRef = useRef<(() => void) | null>(null);
-
-// Required helper functions
-const updateInputField = (fieldName: string, value: string) => {
-  setInputData(prev => ({ ...prev, [fieldName]: value }));
-};
 ```
 
 ## Critical: Do Not Modify
