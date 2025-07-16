@@ -16,6 +16,7 @@ import { toast } from "sonner";
  * - Automatic form state management and validation
  * - Run history tracking with detailed audit trails
  * - Error handling with user-friendly toast notifications
+ * - Smart UI field updates: only on page load and workflow completion (prevents edit conflicts)
  * 
  * 📋 CONFIGURATION:
  * - inputFields: Form fields sent to N8N (cleared after submission)
@@ -72,6 +73,10 @@ export function useN8nWorkflow({
   const [highlightedFields, setHighlightedFields] = useState<Set<string>>(new Set());
   const [showDebug, setShowDebug] = useState(false);
   const eventSourceRef = useRef<EventSource | null>(null);
+  
+  // Control when UI fields should update from results table
+  const [shouldUpdateFromResults, setShouldUpdateFromResults] = useState(true);
+  const [hasInitialized, setHasInitialized] = useState(false);
 
   // Results and run history state
   const [currentRunId, setCurrentRunId] = useState<string | null>(null);
@@ -124,10 +129,11 @@ export function useN8nWorkflow({
     clientApi.internal.updateResultsOutputData.useMutation({
       onSuccess: (data) => {
         toast.success("Results updated successfully!");
-        void refetchLatestResults();
+        
+        // Only refetch workflow history, not latest results to avoid overwriting UI
         void refetchWorkflowHistory();
         
-        // Update persistent data state with output_data
+        // Update persistent data state with the saved data (but not editable values)
         if (data.output_data) {
           const outputData = data.output_data as Record<string, unknown>;
           const updatedData: Record<string, string> = {};
@@ -260,8 +266,15 @@ export function useN8nWorkflow({
             setCurrentRunStatus(data.status);
             currentRunStatusRef.current = data.status;
           }
+          
+          // Always refetch workflow history for run tracking
           void refetchWorkflowHistory();
-          void refetchLatestResults();
+          
+          // Only refetch latest results and update UI on workflow completion
+          if (data.status === 'completed') {
+            setShouldUpdateFromResults(true);
+            void refetchLatestResults();
+          }
           
           if (data.status === 'completed' || data.status === 'failed') {
             setCurrentRunId(null);
@@ -290,7 +303,8 @@ export function useN8nWorkflow({
   // ==========================================
 
   useEffect(() => {
-    if (latestResults?.output_data) {
+    // Only update UI fields in specific conditions to prevent overwriting user edits
+    if (shouldUpdateFromResults && latestResults?.output_data) {
       // Initialize persistent data from latest results output_data
       const outputData = latestResults.output_data as Record<string, unknown>;
       const initialPersistentData: Record<string, string> = {};
@@ -302,16 +316,21 @@ export function useN8nWorkflow({
       
       // Initialize editable values
       setEditableValues(initialPersistentData);
-    } else {
-      // Initialize empty values if no results yet
+      
+      // Mark as initialized and stop automatic updates
+      setHasInitialized(true);
+      setShouldUpdateFromResults(false);
+    } else if (!hasInitialized) {
+      // Initialize empty values if no results yet (only on first load)
       const emptyData: Record<string, string> = {};
       persistentFields.forEach(field => {
         emptyData[field] = '';
       });
       setPersistentData(emptyData);
       setEditableValues(emptyData);
+      setHasInitialized(true);
     }
-  }, [latestResults, persistentFields]);
+  }, [latestResults, persistentFields, shouldUpdateFromResults, hasInitialized]);
 
   // Keep refs in sync with state
   useEffect(() => {
