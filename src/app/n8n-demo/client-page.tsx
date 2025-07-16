@@ -1,29 +1,32 @@
 // ==========================================
-// N8N TEMPLATE COMPONENT - ADAPTATION GUIDE
+// N8N RESULTS TABLE TEMPLATE COMPONENT - ADAPTATION GUIDE
 // ==========================================
 // 
-// 🎯 TEMPLATE USAGE: Copy this component for any N8N integration use case
+// 🎯 TEMPLATE USAGE: Copy this component for any N8N workflow with run tracking
 // 
 // ✅ ALWAYS CUSTOMIZE (Your Use Case):
 // - INPUT_FIELDS: Form data sent to N8N (no database persistence)
-// - PERSISTENT_FIELDS: Store N8N results or user data (require database columns)
+// - EXPECTED_RESULTS_SCHEMA: Expected outputs from N8N workflow
+// - WORKFLOW_ID: Unique identifier for your workflow
 // - Field labels and validation logic in UI sections
 //
 // ❌ NEVER MODIFY (Core Template):
 // - SSE connection and real-time update logic
 // - tRPC mutation patterns and state management
-// - Real-time highlighting and update mechanics
+// - Results table operations and run history display
+// - Real-time status tracking and update mechanics
 //
 // 🚀 5-MINUTE ADAPTATION PROCESS:
 // 1. cp src/app/n8n-demo/client-page.tsx src/app/your-page/client-page.tsx
 // 2. Update INPUT_FIELDS array with your form fields
-// 3. Update PERSISTENT_FIELDS array with your database fields  
-// 4. Run: node scripts/add-field.js [fieldName] for each PERSISTENT_FIELD
+// 3. Update EXPECTED_RESULTS_SCHEMA array with expected N8N outputs
+// 4. Set WORKFLOW_ID to your unique workflow identifier
 // 5. Customize field labels and validation in UI sections
 //
 // 📋 FIELD TYPES EXPLAINED:
 // - INPUT_FIELDS: Temporary form data → N8N payload → cleared after send
-// - PERSISTENT_FIELDS: Database columns → display/edit → real-time updates
+// - EXPECTED_RESULTS_SCHEMA: Expected N8N outputs → stored in results table
+// - WORKFLOW_ID: Unique identifier for workflow tracking and history
 // ==========================================
 
 "use client";
