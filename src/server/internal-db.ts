@@ -214,6 +214,126 @@ export const ensureStripeFieldsOnce = async () => {
   }
 };
 
+// Enhanced Results table function with detailed logging
+export const ensureResultsTableOnce = async () => {
+  console.log('[internal-db] 🔍 Checking results table...');
+  let client;
+  
+  try {
+    client = await internalDb.connect();
+    
+    // Verify schema exists
+    const schemaCheck = await client.query(`
+      SELECT schema_name 
+      FROM information_schema.schemata 
+      WHERE schema_name = $1
+    `, [env.NC_SCHEMA]);
+    
+    if (schemaCheck.rows.length === 0) {
+      console.log(`[internal-db] ❌ Schema "${env.NC_SCHEMA}" not found, cannot create results table`);
+      return;
+    }
+    
+    console.log(`[internal-db] ✅ Schema verified, proceeding with results table creation...`);
+    
+    // Check if results table exists
+    const tableCheck = await client.query(`
+      SELECT table_name 
+      FROM information_schema.tables 
+      WHERE table_schema = $1 AND table_name = 'results'
+    `, [env.NC_SCHEMA]);
+    
+    if (tableCheck.rows.length === 0) {
+      console.log(`[internal-db] 📝 Creating results table...`);
+      await client.query(`
+        CREATE TABLE "${env.NC_SCHEMA}"."results" (
+          -- Core identification
+          "id" UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          "user_id" VARCHAR NOT NULL,
+          "workflow_id" VARCHAR NOT NULL,
+          
+          -- Data payload
+          "input_data" JSONB NOT NULL,
+          "output_data" JSONB,
+          
+          -- Status & timing  
+          "status" VARCHAR NOT NULL DEFAULT 'processing',
+          "created_at" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          "completed_at" TIMESTAMP,
+          "duration_ms" INTEGER,
+          
+          -- Error & credits
+          "error_message" TEXT,
+          "credits_consumed" INTEGER DEFAULT 0,
+          
+          -- Simple retry tracking (for future implementation)
+          "retry_count" INTEGER DEFAULT 0,
+          "parent_id" UUID
+        )
+      `);
+      console.log(`[internal-db] ✅ Results table created successfully`);
+    } else {
+      console.log(`[internal-db] ✅ Results table already exists`);
+    }
+    
+    // Add foreign key constraint if it doesn't exist
+    try {
+      const constraintCheck = await client.query(`
+        SELECT constraint_name 
+        FROM information_schema.table_constraints 
+        WHERE table_schema = $1 AND table_name = 'results' 
+        AND constraint_name = 'fk_results_parent'
+      `, [env.NC_SCHEMA]);
+      
+      if (constraintCheck.rows.length === 0) {
+        console.log(`[internal-db] 📝 Adding foreign key constraint for parent_id...`);
+        await client.query(`
+          ALTER TABLE "${env.NC_SCHEMA}"."results" 
+          ADD CONSTRAINT fk_results_parent 
+          FOREIGN KEY ("parent_id") REFERENCES "${env.NC_SCHEMA}"."results"("id")
+        `);
+        console.log(`[internal-db] ✅ Foreign key constraint added`);
+      }
+    } catch (error) {
+      console.warn(`[internal-db] ⚠️ Could not add foreign key constraint:`, error instanceof Error ? error.message : String(error));
+    }
+
+    // Create indexes if they don't exist
+    const indexQueries = [
+      {
+        name: 'idx_results_user_workflow',
+        query: `CREATE INDEX IF NOT EXISTS idx_results_user_workflow 
+                ON "${env.NC_SCHEMA}"."results"("user_id", "workflow_id", "created_at" DESC)`
+      },
+      {
+        name: 'idx_results_status',
+        query: `CREATE INDEX IF NOT EXISTS idx_results_status 
+                ON "${env.NC_SCHEMA}"."results"("status", "created_at") 
+                WHERE "status" IN ('processing', 'failed')`
+      }
+    ];
+    
+    for (const { name, query } of indexQueries) {
+      try {
+        console.log(`[internal-db] 📝 Creating index: ${name}`);
+        await client.query(query);
+        console.log(`[internal-db] ✅ Index created: ${name}`);
+      } catch (error) {
+        console.warn(`[internal-db] ⚠️ Could not create index ${name}:`, error instanceof Error ? error.message : String(error));
+      }
+    }
+    
+    console.log('[internal-db] ✅ Results table setup completed');
+    
+  } catch (error) {
+    console.error('[internal-db] ❌ Results table setup failed:', error instanceof Error ? error.message : String(error));
+  } finally {
+    if (client) {
+      client.release();
+    }
+  }
+};
+
 // Run field creation 2 minutes after deployment with singleton pattern
 // This ensures the app is fully running and database is accessible
 if (process.env.NODE_ENV !== 'test' && 
@@ -227,11 +347,12 @@ if (process.env.NODE_ENV !== 'test' &&
     
     Promise.all([
       ensureUidConstraintOnce(),
-      ensureStripeFieldsOnce()
+      ensureStripeFieldsOnce(),
+      ensureResultsTableOnce()
     ]).then(() => {
-      console.log('[internal-db] 🎉 Post-deployment field creation completed successfully!');
+      console.log('[internal-db] 🎉 Post-deployment setup completed successfully!');
     }).catch((error) => {
-      console.error('[internal-db] ❌ Post-deployment field creation failed:', error instanceof Error ? error.message : String(error));
+      console.error('[internal-db] ❌ Post-deployment setup failed:', error instanceof Error ? error.message : String(error));
     });
   }, 2 * 60 * 1000);
 } else if (process.env.NODE_ENV !== 'test') {

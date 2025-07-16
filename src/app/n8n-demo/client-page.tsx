@@ -1,29 +1,32 @@
 // ==========================================
-// N8N TEMPLATE COMPONENT - ADAPTATION GUIDE
+// N8N RESULTS TABLE TEMPLATE COMPONENT - ADAPTATION GUIDE
 // ==========================================
 // 
-// 🎯 TEMPLATE USAGE: Copy this component for any N8N integration use case
+// 🎯 TEMPLATE USAGE: Copy this component for any N8N workflow with run tracking
 // 
 // ✅ ALWAYS CUSTOMIZE (Your Use Case):
 // - INPUT_FIELDS: Form data sent to N8N (no database persistence)
-// - PERSISTENT_FIELDS: Store N8N results or user data (require database columns)
+// - EXPECTED_RESULTS_SCHEMA: Expected outputs from N8N workflow
+// - WORKFLOW_ID: Unique identifier for your workflow
 // - Field labels and validation logic in UI sections
 //
 // ❌ NEVER MODIFY (Core Template):
 // - SSE connection and real-time update logic
 // - tRPC mutation patterns and state management
-// - Real-time highlighting and update mechanics
+// - Results table operations and run history display
+// - Real-time status tracking and update mechanics
 //
 // 🚀 5-MINUTE ADAPTATION PROCESS:
 // 1. cp src/app/n8n-demo/client-page.tsx src/app/your-page/client-page.tsx
 // 2. Update INPUT_FIELDS array with your form fields
-// 3. Update PERSISTENT_FIELDS array with your database fields  
-// 4. Run: node scripts/add-field.js [fieldName] for each PERSISTENT_FIELD
+// 3. Update EXPECTED_RESULTS_SCHEMA array with expected N8N outputs
+// 4. Set WORKFLOW_ID to your unique workflow identifier
 // 5. Customize field labels and validation in UI sections
 //
 // 📋 FIELD TYPES EXPLAINED:
 // - INPUT_FIELDS: Temporary form data → N8N payload → cleared after send
-// - PERSISTENT_FIELDS: Database columns → display/edit → real-time updates
+// - EXPECTED_RESULTS_SCHEMA: Expected N8N outputs → stored in results table
+// - WORKFLOW_ID: Unique identifier for workflow tracking and history
 // ==========================================
 
 "use client";
@@ -53,6 +56,16 @@ const PERSISTENT_FIELDS = [
   'aiRecommendation',  // Example: N8N analysis result (read-only)
   'finalDecision'      // Example: User can edit this field and save back
 ];
+
+// ✅ ALWAYS CUSTOMIZE: Define what output structure this template expects from N8N
+const EXPECTED_RESULTS_SCHEMA = {
+  aiRecommendation: 'string',
+  confidence: 'number', 
+  reasoning: 'string'
+} as const;
+
+// Workflow identifier for this template
+const WORKFLOW_ID = 'order-processing'; // ✅ CUSTOMIZE: Update for your use case
 
 // 💡 TEMPLATE ADAPTATION EXAMPLES:
 // E-commerce: INPUT_FIELDS = ['customerEmail', 'productSku', 'orderQuantity']
@@ -85,6 +98,14 @@ export function N8nDemoClient() {
   const [highlightedFields, setHighlightedFields] = useState<Set<string>>(new Set());
   const [showDebug, setShowDebug] = useState(false);
   const eventSourceRef = useRef<EventSource | null>(null);
+
+  // Results and run history state
+  const [currentRunId, setCurrentRunId] = useState<string | null>(null);
+  const [currentRunStatus, setCurrentRunStatus] = useState<string>('idle');
+  const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
+  
+  // Refs for SSE callback to avoid stale closures
+  const currentRunIdRef = useRef<string | null>(null);
 
   // Helper functions
   const updateInputField = (fieldName: string, value: string) => {
@@ -150,8 +171,15 @@ export function N8nDemoClient() {
 
   const { mutate: sendToN8n, isPending: isSendingToN8n } = 
     clientApi.internal.sendToN8n.useMutation({
-      onSuccess: () => {
-        toast.success("Sent to N8N successfully! Waiting for webhook response...");
+      onSuccess: (result) => {
+        toast.success("Sent to N8N successfully! Watching for progress...");
+        
+        // Set current run ID for tracking
+        if (result.results_id) {
+          setCurrentRunId(result.results_id);
+          setCurrentRunStatus('processing');
+        }
+        
         // Clear input fields after successful send
         setInputData(
           INPUT_FIELDS.reduce((acc, field) => {
@@ -159,9 +187,13 @@ export function N8nDemoClient() {
             return acc;
           }, {} as Record<string, string>)
         );
+        
+        // Refresh history to show new run
+        void refetchHistory();
       },
       onError: (error) => {
         toast.error(`N8N error: ${error.message}`);
+        setCurrentRunStatus('idle');
       },
     });
 
@@ -175,6 +207,48 @@ export function N8nDemoClient() {
   } = clientApi.internal.testConnection.useQuery(undefined, {
     enabled: false,
   });
+
+  // New queries for results management
+  const { data: workflowHistory, refetch: refetchHistory } = 
+    clientApi.internal.getWorkflowHistory.useQuery({
+      workflow_id: WORKFLOW_ID,
+      limit: 10
+    });
+
+  const { data: selectedRunDetails, isLoading: isLoadingRunDetails } = 
+    clientApi.internal.getRunDetails.useQuery(
+      { id: selectedRunId! },
+      { enabled: !!selectedRunId }
+    );
+
+  // Delete run mutation
+  const { mutate: deleteRun, isPending: isDeletingRun } = 
+    clientApi.internal.deleteRun.useMutation({
+      onSuccess: (data) => {
+        toast.success("Run deleted successfully");
+        // Close details if we're deleting the selected run
+        if (selectedRunId === data.id) {
+          setSelectedRunId(null);
+        }
+        // Refresh history
+        void refetchHistory();
+      },
+      onError: (error) => {
+        toast.error(`Failed to delete run: ${error.message}`);
+      },
+    });
+
+  // Ref for refetchHistory to avoid stale closures
+  const refetchHistoryRef = useRef(refetchHistory);
+
+  // Update refs when values change
+  useEffect(() => {
+    currentRunIdRef.current = currentRunId;
+  }, [currentRunId]);
+
+  useEffect(() => {
+    refetchHistoryRef.current = refetchHistory;
+  }, [refetchHistory]);
 
   // ==========================================
   // ❌ NEVER MODIFY: Core Template Real-Time Updates via SSE
@@ -191,26 +265,45 @@ export function N8nDemoClient() {
       try {
         const data = JSON.parse(event.data) as {
           type: string;
+          id?: string;
+          status?: string;
+          workflow_id?: string;
+          timestamp?: string;
+          // Legacy support
           updatedFields?: string[];
           fetchedValues?: Record<string, string>;
-          timestamp?: string;
         };
 
         if (data.type === "userData-updated") {
+          // Legacy userData update handling
           setLastUpdate(data.timestamp ?? new Date().toISOString());
           
-          // Highlight updated fields
           if (data.updatedFields) {
             setHighlightedFields(new Set(data.updatedFields));
-            
-            // Clear highlights after 3 seconds
             setTimeout(() => {
               setHighlightedFields(new Set());
             }, 3000);
           }
           
-          // Use invalidate instead of refetch for better performance
           void utils.internal.getUserData.invalidate();
+        } else if (data.type.startsWith("result-")) {
+          // New results-based update handling
+          setLastUpdate(data.timestamp ?? new Date().toISOString());
+          
+          if (data.id === currentRunIdRef.current) {
+            setCurrentRunStatus(data.status ?? 'unknown');
+          }
+          
+          if (data.type === "result-done" || data.type === "result-failed") {
+            // Refresh history when run completes
+            void refetchHistoryRef.current();
+            
+            // If it's our current run, fetch the details
+            if (data.id === currentRunIdRef.current) {
+              setSelectedRunId(data.id);
+              setTimeout(() => setCurrentRunId(null), 1000); // Clear current run after delay
+            }
+          }
         }
       } catch (error) {
         console.error("Failed to parse SSE message:", error);
@@ -262,7 +355,15 @@ export function N8nDemoClient() {
       return;
     }
 
-    sendToN8n(dataToSend);
+    // Reset current run state
+    setCurrentRunId(null);
+    setCurrentRunStatus('processing');
+
+    sendToN8n({
+      data: dataToSend,
+      workflow_id: WORKFLOW_ID,
+      expected_results_schema: EXPECTED_RESULTS_SCHEMA
+    });
   };
 
   const handleSaveField = (fieldName: string) => {
@@ -505,6 +606,151 @@ export function N8nDemoClient() {
           </Card>
         </div>
 
+        {/* Run History Section */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center justify-between">
+              <span>Run History</span>
+              {currentRunId && (
+                <div className="flex items-center space-x-2">
+                  <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
+                  <span className="text-sm text-muted-foreground">
+                    Processing: {currentRunStatus}
+                  </span>
+                </div>
+              )}
+            </CardTitle>
+            <p className="text-sm text-muted-foreground">
+              Track all workflow executions and view detailed results
+            </p>
+          </CardHeader>
+          <CardContent>
+            {workflowHistory && workflowHistory.length > 0 ? (
+              <div className="space-y-3">
+                {workflowHistory.map((run) => {
+                  const isSelected = selectedRunId === run.id;
+                  const isCurrentRun = currentRunId === run.id;
+                  
+                  return (
+                    <div key={run.id} className="space-y-2">
+                      <div 
+                        className={`p-3 border rounded-lg transition-colors ${
+                          isSelected ? 'border-blue-500 bg-blue-50' : 
+                          isCurrentRun ? 'border-orange-500 bg-orange-50' : 
+                          'hover:border-gray-300'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center space-x-3 flex-1 cursor-pointer" onClick={() => setSelectedRunId(isSelected ? null : run.id)}>
+                            <div className={`w-3 h-3 rounded-full ${
+                              run.status === 'completed' ? 'bg-green-500' :
+                              run.status === 'failed' ? 'bg-red-500' :
+                              run.status === 'processing' ? 'bg-blue-500 animate-pulse' :
+                              'bg-gray-400'
+                            }`} />
+                            <div>
+                              <div className="font-medium text-sm">
+                                {run.status.charAt(0).toUpperCase() + run.status.slice(1)}
+                                {isCurrentRun && ' (Current)'}
+                              </div>
+                              <div className="text-xs text-muted-foreground">
+                                {new Date(run.created_at).toLocaleString()}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <div className="text-right">
+                              {run.duration_ms && (
+                                <div className="text-xs text-muted-foreground">
+                                  {(run.duration_ms / 1000).toFixed(1)}s
+                                </div>
+                              )}
+                              {run.credits_consumed > 0 && (
+                                <div className="text-xs text-orange-600">
+                                  -{run.credits_consumed} credits
+                                </div>
+                              )}
+                            </div>
+                            {!isCurrentRun && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-6 w-6 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  deleteRun({ id: run.id });
+                                }}
+                                disabled={isDeletingRun}
+                                title="Delete run"
+                              >
+                                ×
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      
+                      {/* Run Details */}
+                      {isSelected && (
+                        <div className="ml-6 p-3 bg-gray-50 rounded-md border">
+                          {isLoadingRunDetails ? (
+                            <div className="text-sm text-muted-foreground">Loading details...</div>
+                          ) : selectedRunDetails ? (
+                            <div className="space-y-3">
+                              <div>
+                                <h5 className="font-medium text-sm mb-2">Input Data:</h5>
+                                <pre className="text-xs bg-white p-2 rounded border overflow-x-auto">
+                                  {JSON.stringify(selectedRunDetails.input_data, null, 2)}
+                                </pre>
+                              </div>
+                              
+                              {selectedRunDetails.output_data && (
+                                <div>
+                                  <h5 className="font-medium text-sm mb-2">Output Data:</h5>
+                                  <pre className="text-xs bg-white p-2 rounded border overflow-x-auto">
+                                    {JSON.stringify(selectedRunDetails.output_data, null, 2)}
+                                  </pre>
+                                </div>
+                              )}
+                              
+                              {selectedRunDetails.error_message && (
+                                <div>
+                                  <h5 className="font-medium text-sm mb-2 text-red-600">Error:</h5>
+                                  <div className="text-xs bg-red-50 p-2 rounded border text-red-700">
+                                    {selectedRunDetails.error_message}
+                                  </div>
+                                </div>
+                              )}
+                              
+                              <div className="grid grid-cols-2 gap-4 text-xs">
+                                <div>
+                                  <span className="text-muted-foreground">Run ID:</span>
+                                  <div className="font-mono">{selectedRunDetails.id}</div>
+                                </div>
+                                <div>
+                                  <span className="text-muted-foreground">Workflow:</span>
+                                  <div>{selectedRunDetails.workflow_id}</div>
+                                </div>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="text-sm text-red-600">Failed to load run details</div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="text-center py-8 text-muted-foreground">
+                <div className="text-sm">No workflow runs yet</div>
+                <div className="text-xs mt-1">Submit the form above to create your first run</div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
         {/* N8N Integration Instructions */}
         <Card>
           <CardHeader>
@@ -524,37 +770,71 @@ npm run add-field finalDecision`}
               </div>
               
               <div className="p-4 bg-green-50 rounded-md">
-                <h4 className="font-semibold mb-2">📤 What N8N Receives</h4>
+                <h4 className="font-semibold mb-2">📤 Enhanced N8N Payload (What N8N Receives)</h4>
                 <pre className="text-xs bg-white p-2 rounded border">
 {`{
   "user_id": "user-uuid-here",
+  "id": "results-uuid-for-tracking",
+  "workflow_id": "${WORKFLOW_ID}",
   "user_email": "user@example.com",
   "usage_credits": 1000,
   "data": {
     "orderDescription": "user_input_value",
     "urgencyLevel": "user_input_value"
   },
+  "expected_results_schema": {
+    "aiRecommendation": "string",
+    "confidence": "number", 
+    "reasoning": "string"
+  },
   "action": "process"
 }`}
                 </pre>
                 <p className="text-xs text-muted-foreground mt-2">
-                  <strong>usage_credits:</strong> Current user&apos;s available credits (integer) allocated via invoice payment processing
+                  <strong>id:</strong> Track this specific run in the results table<br/>
+                  <strong>expected_results_schema:</strong> Output structure N8N should return
                 </p>
               </div>
               
               <div className="p-4 bg-orange-50 rounded-md">
-                <h4 className="font-semibold mb-2">📥 What N8N Should Send Back</h4>
+                <h4 className="font-semibold mb-2">📥 New N8N Webhook Format (What N8N Should Send Back)</h4>
                 <p className="text-sm text-muted-foreground mb-2">
-                  After processing and updating database, send webhook to:
+                  Send webhook to track progress and completion:
                 </p>
                 <pre className="text-xs bg-white p-2 rounded border">
 {`POST ${typeof window !== 'undefined' ? window.location.origin : ''}/api/webhooks/internal-updated
 
+// Progress Update:
 {
-  "user_id": "same-uuid-from-request",
-  "updatedFields": ["aiRecommendation", "finalDecision"]
+  "id": "same-results-uuid-from-request",
+  "status": "analyzing"
+}
+
+// Completion with Results:
+{
+  "id": "same-results-uuid-from-request", 
+  "status": "completed",
+  "credit_cost": 25,
+  "output_data": {
+    "aiRecommendation": "Process immediately",
+    "confidence": 0.85,
+    "reasoning": "High priority order with verified customer"
+  }
+}
+
+// Error:
+{
+  "id": "same-results-uuid-from-request",
+  "status": "failed",
+  "output_data": {
+    "error": "Processing timeout"
+  }
 }`}
                 </pre>
+                <p className="text-xs text-muted-foreground mt-2">
+                  <strong>credit_cost:</strong> Optional credits to deduct from user balance<br/>
+                  <strong>output_data:</strong> Results matching expected_results_schema
+                </p>
               </div>
               
               <div className="p-4 bg-purple-50 rounded-md">

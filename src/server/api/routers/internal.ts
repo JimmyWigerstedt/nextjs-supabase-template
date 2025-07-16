@@ -1,21 +1,24 @@
 // ==========================================
-// TEMPLATE: Dynamic Field Router
+// TEMPLATE: N8N Results Table Router
 // ==========================================
-// This router handles any field names without code modifications.
-// After implementing the flexibility changes, adding new fields
-// requires only database schema updates - no backend code changes.
+// This router manages N8N workflow integration with complete run tracking.
+// Results table provides comprehensive audit trails for all workflow executions.
 //
-// DYNAMIC CAPABILITIES:
-// - updateUserData: Accepts any field names as input
-// - getUserData: Returns all user fields dynamically  
-// - sendToN8n: Forwards any fields to n8n workflows
+// RESULTS TABLE CAPABILITIES:
+// - sendToN8n: Creates results record and forwards to N8N with run_id
+// - getWorkflowHistory: Retrieves user's workflow run history  
+// - getRunDetails: Gets specific run details and results
+// - deleteRun: Removes run from history
+// - All operations maintain complete audit trail
+//
+// DYNAMIC FIELD CAPABILITIES:
+// - updateUserData: Accepts any field names for userData table
+// - getUserData: Returns all user fields dynamically
 // - All SQL operations handle field names dynamically
 //
 // CREDITS SYSTEM:
 // - usage_credits are ADDITIVE and NEVER EXPIRE
-// - At signup: Add initial credits
-// - At subscription renewal: Add credits (don't replace)
-// - One-time bundles: Add credits to existing total
+// - Credit deduction happens during sendToN8n operation
 // - Credits accumulate over time and persist indefinitely
 // ==========================================
 
@@ -140,54 +143,97 @@ export const internalRouter = createTRPCRouter({
 
   sendToN8n: authorizedProcedure
     .input(
-      z.record(z.string(), z.string())
+      z.object({
+        data: z.record(z.string(), z.string()),
+        workflow_id: z.string(),
+        expected_results_schema: z.record(z.string(), z.string()).optional()
+      })
     )
     .mutation(async ({ input, ctx }) => {
       const client = await internalDb.connect();
       try {
-        // Get user's current usage_credits from database
+        // Get user's current usage_credits from database, initialize if not exists
         const userDataResult = await client.query(
-          `SELECT "usage_credits" FROM "${env.NC_SCHEMA}"."userData" WHERE "UID" = $1`,
-          [ctx.supabaseUser!.id]
+          `INSERT INTO "${env.NC_SCHEMA}"."userData" ("UID", "email", "usage_credits") 
+           VALUES ($1, $2, 0)
+           ON CONFLICT ("UID") DO UPDATE SET "updated_at" = CURRENT_TIMESTAMP
+           RETURNING "usage_credits"`,
+          [ctx.supabaseUser!.id, ctx.supabaseUser!.email]
         );
         
         // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-        const userData = userDataResult.rows[0] as { usage_credits?: string | number } | undefined;
+        const userData = userDataResult.rows[0] as { usage_credits?: string | number };
         const usageCredits = userData?.usage_credits ? 
           (typeof userData.usage_credits === 'string' ? parseInt(userData.usage_credits, 10) : userData.usage_credits) : 0;
         
-        // Use the existing n8n client infrastructure with usage_credits included
+        // Create results record before N8N call
+        const createResultsQuery = `
+          INSERT INTO "${env.NC_SCHEMA}"."results" 
+          ("user_id", "workflow_id", "input_data", "status", "created_at") 
+          VALUES ($1, $2, $3, 'processing', CURRENT_TIMESTAMP)
+          RETURNING "id"
+        `;
+        
+        const resultsResult = await client.query(createResultsQuery, [
+          ctx.supabaseUser!.id,
+          input.workflow_id,
+          JSON.stringify(input.data)
+        ]);
+        
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        const resultsRecord = resultsResult.rows[0] as { id: string };
+        const resultsId = resultsRecord.id;
+        
+        console.log(`[sendToN8n] Created results record ${resultsId} for user ${ctx.supabaseUser!.id}`);
+        
+        // Enhanced N8N payload with results ID and expected schema
         const payload = {
           user_id: ctx.supabaseUser!.id,
+          id: resultsId, // results.id for tracking this specific run
+          workflow_id: input.workflow_id,
           user_email: ctx.supabaseUser!.email,
-          usage_credits: usageCredits, // Include current usage credits
-          data: input, // Pass all input fields directly
+          usage_credits: usageCredits,
+          data: input.data,
+          expected_results_schema: input.expected_results_schema ?? {},
           action: "process",
         };
 
-                 // Send to n8n using the auth header specified by the user
-         const response = await fetch(`${env.N8N_BASE_URL}/webhook/your-n8n-endpoint`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-webhook-secret": env.N8N_WEBHOOK_SECRET,
-          },
-          body: JSON.stringify(payload),
-        });
+        try {
+          // Send to n8n using the auth header specified by the user
+          const response = await fetch(`${env.N8N_BASE_URL}/webhook/your-n8n-endpoint`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "x-webhook-secret": env.N8N_WEBHOOK_SECRET,
+            },
+            body: JSON.stringify(payload),
+          });
 
-        if (!response.ok) {
-          throw new Error(`n8n request failed: ${response.status} ${response.statusText}`);
+          if (!response.ok) {
+            throw new Error(`n8n request failed: ${response.status} ${response.statusText}`);
+          }
+
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+          const result: Record<string, unknown> = await response.json();
+          console.info(`[n8n] Payload sent successfully:`, { resultsId, payload, result });
+          
+          return {
+            success: true,
+            message: "Payload sent to n8n successfully",
+            results_id: resultsId,
+            data: result,
+          };
+        } catch (n8nError) {
+          // Update results record with error if N8N call fails
+          await client.query(
+            `UPDATE "${env.NC_SCHEMA}"."results" 
+             SET "status" = 'failed', "error_message" = $1, "completed_at" = CURRENT_TIMESTAMP,
+                 "duration_ms" = EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - "created_at")) * 1000
+             WHERE "id" = $2`,
+            [n8nError instanceof Error ? n8nError.message : String(n8nError), resultsId]
+          );
+          throw n8nError;
         }
-
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-        const result: Record<string, unknown> = await response.json();
-        console.info(`[n8n] Payload sent successfully:`, { payload, result });
-        
-        return {
-          success: true,
-          message: "Payload sent to n8n successfully",
-          data: result,
-        };
       } catch (error) {
         console.error('Failed to send to n8n:', error);
         throw new Error(`Failed to send to n8n: ${error instanceof Error ? error.message : String(error)}`);
@@ -311,32 +357,115 @@ export const internalRouter = createTRPCRouter({
     }
   }),
 
-  deleteAccount: authorizedProcedure.mutation(async ({ ctx }) => {
-    const client = await internalDb.connect();
-    try {
-      console.log(`[deleteAccount] Deleting account for user ${ctx.supabaseUser!.id}`);
-      
-      // Delete user data from internal database
-      const result = await client.query(
-        `DELETE FROM "${env.NC_SCHEMA}"."userData" WHERE "UID" = $1 RETURNING *`,
-        [ctx.supabaseUser!.id]
-      );
-      
-      console.log(`[deleteAccount] Deleted ${result.rowCount} row(s) for user ${ctx.supabaseUser!.id}`);
-      
-      // Note: This only deletes from internal database
-      // Supabase user deletion would need to be handled separately
-      // and typically requires admin privileges
-      
-      return {
-        success: true,
-        message: "Account data deleted successfully from internal database",
-      };
-    } catch (error) {
-      console.error(`[deleteAccount] Failed to delete account for ${ctx.supabaseUser!.id}:`, error);
-      throw new Error('Failed to delete account data');
-    } finally {
-      client.release();
-    }
-  }),
+  getWorkflowHistory: authorizedProcedure
+    .input(z.object({
+      workflow_id: z.string().optional(),
+      limit: z.number().min(1).max(50).default(20),
+      offset: z.number().min(0).default(0)
+    }))
+    .query(async ({ input, ctx }) => {
+      const client = await internalDb.connect();
+      try {
+        let query = `
+          SELECT "id", "workflow_id", "status", "created_at", "completed_at", 
+                 "duration_ms", "credits_consumed", "error_message"
+          FROM "${env.NC_SCHEMA}"."results" 
+          WHERE "user_id" = $1
+        `;
+        const params: (string | number)[] = [ctx.supabaseUser!.id];
+        
+        if (input.workflow_id) {
+          query += ` AND "workflow_id" = $${params.length + 1}`;
+          params.push(input.workflow_id);
+        }
+        
+        query += ` ORDER BY "created_at" DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
+        params.push(input.limit, input.offset);
+        
+        const result = await client.query(query, params);
+        
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        return result.rows as Array<{
+          id: string;
+          workflow_id: string;
+          status: string;
+          created_at: string;
+          completed_at: string | null;
+          duration_ms: number | null;
+          credits_consumed: number;
+          error_message: string | null;
+        }>;
+      } catch (error) {
+        console.error('Failed to get workflow history:', error);
+        throw new Error('Failed to retrieve workflow history');
+      } finally {
+        client.release();
+      }
+    }),
+
+  getRunDetails: authorizedProcedure
+    .input(z.object({ id: z.string().uuid() }))
+    .query(async ({ input, ctx }) => {
+      const client = await internalDb.connect();
+      try {
+        const result = await client.query(
+          `SELECT * FROM "${env.NC_SCHEMA}"."results" WHERE "id" = $1 AND "user_id" = $2`,
+          [input.id, ctx.supabaseUser!.id]
+        );
+        
+        if (result.rows.length === 0) {
+          throw new Error('Results record not found or access denied');
+        }
+        
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        const record = result.rows[0] as {
+          id: string;
+          user_id: string;
+          workflow_id: string;
+          input_data: object;
+          output_data: object | null;
+          status: string;
+          created_at: string;
+          completed_at: string | null;
+          duration_ms: number | null;
+          error_message: string | null;
+          credits_consumed: number;
+          retry_count: number;
+          parent_id: string | null;
+        };
+        
+        return record;
+      } catch (error) {
+        console.error('Failed to get run details:', error);
+        throw new Error('Failed to retrieve run details');
+      } finally {
+        client.release();
+      }
+    }),
+
+  deleteRun: authorizedProcedure
+    .input(z.object({ id: z.string().uuid() }))
+    .mutation(async ({ input, ctx }) => {
+      const client = await internalDb.connect();
+      try {
+        const result = await client.query(
+          `DELETE FROM "${env.NC_SCHEMA}"."results" WHERE "id" = $1 AND "user_id" = $2 RETURNING "id"`,
+          [input.id, ctx.supabaseUser!.id]
+        );
+        
+        if (result.rows.length === 0) {
+          throw new Error('Results record not found or access denied');
+        }
+        
+        console.log(`[deleteRun] Deleted results record ${input.id} for user ${ctx.supabaseUser!.id}`);
+        
+        return { success: true, id: input.id };
+      } catch (error) {
+        console.error('Failed to delete run:', error);
+        throw new Error('Failed to delete run');
+      } finally {
+        client.release();
+      }
+    }),
+
 }); 

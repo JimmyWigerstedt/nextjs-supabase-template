@@ -1,4 +1,8 @@
-# Agents Development Guide
+# AI Agents Development Guide
+
+**🎯 Purpose:** Quick reference for AI agents working with this Next.js Supabase template.
+
+**📖 Documentation:** See README.md → TEMPLATE_GUIDE.md → DEVELOPERS.md for complete information.
 
 ## Build and Testing
 
@@ -12,6 +16,11 @@ The `build-temp.bat` file sets the required environment variables with placehold
 - Bypasses environment validation during build process
 - Allows compilation checking without real database connections
 - Provides consistent build environment across different machines
+
+### Documentation Structure (Updated)
+- **README.md** - Start here for project overview and quick start
+- **TEMPLATE_GUIDE.md** - Complete template adaptation with field examples
+- **DEVELOPERS.md** - Technical implementation and architecture details
 
 ### Expected Build Warnings (Safe to Ignore)
 - Database connection errors during page data collection (ECONNREFUSED to localhost:5432)
