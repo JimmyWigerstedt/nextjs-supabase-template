@@ -14,7 +14,7 @@ import { AppHeader } from "~/components/layout/AppHeader";
 export function SettingsClient() {
   
   // Get user data
-  const { data: userData, isLoading: isLoadingUserData, refetch: refetchUserData } = clientApi.internal.getUserData.useQuery();
+  const { data: userData, isLoading: isLoadingUserData } = clientApi.internal.getUserData.useQuery();
   
   // Get current subscription
   const { data: currentSubscription, isLoading: isLoadingSubscription } = clientApi.payments.getCurrentSubscription.useQuery();

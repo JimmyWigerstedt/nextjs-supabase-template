@@ -36,8 +36,13 @@ const signupSchema = z.object({
   path: ["confirmPassword"],
 });
 
+const forgotPasswordSchema = z.object({
+  email: z.string().email(),
+});
+
 type LoginFormType = z.infer<typeof loginSchema>;
 type SignupFormType = z.infer<typeof signupSchema>;
+type ForgotPasswordFormType = z.infer<typeof forgotPasswordSchema>;
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -48,8 +53,9 @@ interface AuthModalProps {
 
 export function AuthModal({ isOpen, onClose, onSuccess, initialMode = 'login' }: AuthModalProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [mode, setMode] = useState<'login' | 'signup' | 'email-sent'>(initialMode);
+  const [mode, setMode] = useState<'login' | 'signup' | 'email-sent' | 'forgot-password' | 'reset-email-sent'>(initialMode);
   const [signupEmail, setSignupEmail] = useState<string>('');
+  const [resetEmail, setResetEmail] = useState<string>('');
   
   const loginForm = useForm<LoginFormType>({
     resolver: zodResolver(loginSchema),
@@ -69,6 +75,14 @@ export function AuthModal({ isOpen, onClose, onSuccess, initialMode = 'login' }:
       confirmPassword: "",
       firstName: "",
       lastName: "",
+    },
+  });
+
+  const forgotPasswordForm = useForm<ForgotPasswordFormType>({
+    resolver: zodResolver(forgotPasswordSchema),
+    reValidateMode: "onChange",
+    defaultValues: {
+      email: "",
     },
   });
 
@@ -167,6 +181,39 @@ export function AuthModal({ isOpen, onClose, onSuccess, initialMode = 'login' }:
     }
   };
 
+  const onForgotPasswordSubmit = async (data: ForgotPasswordFormType) => {
+    const { email } = data;
+    setIsSubmitting(true);
+    
+    try {
+      const supabase = supabaseBrowser();
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/reset-password`,
+      });
+
+      if (error) {
+        toast.error(`Error sending reset email - ${error.message}`);
+        return;
+      }
+
+      toast.success("Password reset email sent! Check your inbox.");
+      
+      // Store the email for the confirmation screen
+      setResetEmail(email);
+      
+      // Switch to reset email sent mode
+      setMode('reset-email-sent');
+      
+      // Reset form
+      forgotPasswordForm.reset();
+      
+    } catch (error) {
+      toast.error("An unexpected error occurred");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -176,7 +223,11 @@ export function AuthModal({ isOpen, onClose, onSuccess, initialMode = 'login' }:
           {/* Header */}
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-2xl font-bold text-gray-900">
-              {mode === 'login' ? 'Login' : mode === 'signup' ? 'Sign Up' : 'Check Your Email'}
+              {mode === 'login' ? 'Login' : 
+               mode === 'signup' ? 'Sign Up' : 
+               mode === 'forgot-password' ? 'Reset Password' :
+               mode === 'reset-email-sent' ? 'Check Your Email' :
+               'Check Your Email'}
             </h2>
             <Button 
               variant="ghost" 
@@ -194,6 +245,10 @@ export function AuthModal({ isOpen, onClose, onSuccess, initialMode = 'login' }:
               ? 'Enter your email and password to access your account' 
               : mode === 'signup'
               ? 'Create a new account to get started'
+              : mode === 'forgot-password'
+              ? 'Enter your email address and we\'ll send you a link to reset your password'
+              : mode === 'reset-email-sent'
+              ? `We've sent a password reset email to ${resetEmail}. Please check your inbox and click the link to reset your password.`
               : `We've sent a verification email to ${signupEmail}. Please check your inbox and click the verification link to complete your account setup.`
             }
           </p>
@@ -247,6 +302,53 @@ export function AuthModal({ isOpen, onClose, onSuccess, initialMode = 'login' }:
                 >
                   {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                   Login
+                </Button>
+              </form>
+            </Form>
+          )}
+
+          {/* Forgot Password Link */}
+          {mode === 'login' && (
+            <div className="mt-4 text-center">
+              <button
+                onClick={() => setMode('forgot-password')}
+                className="text-sm text-blue-600 hover:text-blue-800 underline"
+              >
+                Forgot your password?
+              </button>
+            </div>
+          )}
+
+          {/* Forgot Password Form */}
+          {mode === 'forgot-password' && (
+            <Form {...forgotPasswordForm}>
+              <form onSubmit={forgotPasswordForm.handleSubmit(onForgotPasswordSubmit)} className="space-y-4">
+                <FormField
+                  control={forgotPasswordForm.control}
+                  name="email"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Email</FormLabel>
+                      <FormControl>
+                        <Input
+                          {...field}
+                          type="email"
+                          placeholder="Enter your email"
+                          disabled={isSubmitting}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <Button
+                  type="submit"
+                  className="w-full"
+                  disabled={isSubmitting || !forgotPasswordForm.formState.isValid}
+                >
+                  {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Send Reset Email
                 </Button>
               </form>
             </Form>
@@ -363,7 +465,7 @@ export function AuthModal({ isOpen, onClose, onSuccess, initialMode = 'login' }:
           )}
 
           {/* Email Verification Screen */}
-          {mode === 'email-sent' && (
+          {(mode === 'email-sent' || mode === 'reset-email-sent') && (
             <div className="space-y-4">
               {/* Email icon */}
               <div className="flex justify-center mb-4">
@@ -380,7 +482,10 @@ export function AuthModal({ isOpen, onClose, onSuccess, initialMode = 'login' }:
                   Check your spam folder if you don&apos;t see the email within a few minutes.
                 </p>
                 <p className="text-sm text-gray-600">
-                  Once you verify your email, you can return to this page and sign in.
+                  {mode === 'reset-email-sent' 
+                    ? 'Click the link in the email to reset your password.'
+                    : 'Once you verify your email, you can return to this page and sign in.'
+                  }
                 </p>
               </div>
 
@@ -400,18 +505,18 @@ export function AuthModal({ isOpen, onClose, onSuccess, initialMode = 'login' }:
                   OK
                 </Button>
                 <Button
-                  onClick={() => setMode('signup')}
+                  onClick={() => setMode(mode === 'reset-email-sent' ? 'forgot-password' : 'signup')}
                   className="w-full"
                   variant="outline"
                 >
-                  Back to Sign Up
+                  {mode === 'reset-email-sent' ? 'Back to Reset Password' : 'Back to Sign Up'}
                 </Button>
               </div>
             </div>
           )}
 
           {/* Footer */}
-          {mode !== 'email-sent' && (
+          {mode !== 'email-sent' && mode !== 'reset-email-sent' && (
             <div className="mt-6 text-center text-sm text-gray-600">
               {mode === 'login' ? (
                 <>
@@ -421,6 +526,16 @@ export function AuthModal({ isOpen, onClose, onSuccess, initialMode = 'login' }:
                     className="text-blue-600 hover:text-blue-800 underline"
                   >
                     Sign up
+                  </button>
+                </>
+              ) : mode === 'forgot-password' ? (
+                <>
+                  Remember your password?{" "}
+                  <button
+                    onClick={() => setMode('login')}
+                    className="text-blue-600 hover:text-blue-800 underline"
+                  >
+                    Back to Login
                   </button>
                 </>
               ) : (

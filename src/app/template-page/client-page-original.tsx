@@ -1,32 +1,14 @@
 // ==========================================
-// N8N RESULTS TABLE TEMPLATE COMPONENT - ADAPTATION GUIDE
+// N8N TEMPLATE COMPONENT - ORDER MANAGEMENT
 // ==========================================
 // 
-// 🎯 TEMPLATE USAGE: Copy this component for any N8N workflow with run tracking
+// 🎯 TEMPLATE EXAMPLE: Order Management with N8N automation
 // 
-// ✅ ALWAYS CUSTOMIZE (Your Use Case):
+// This template demonstrates the field-driven architecture pattern:
 // - INPUT_FIELDS: Form data sent to N8N (no database persistence)
-// - EXPECTED_RESULTS_SCHEMA: Expected outputs from N8N workflow
-// - WORKFLOW_ID: Unique identifier for your workflow
-// - Field labels and validation logic in UI sections
-//
-// ❌ NEVER MODIFY (Core Template):
-// - SSE connection and real-time update logic
-// - tRPC mutation patterns and state management
-// - Results table operations and run history display
-// - Real-time status tracking and update mechanics
-//
-// 🚀 5-MINUTE ADAPTATION PROCESS:
-// 1. cp src/app/n8n-demo/client-page.tsx src/app/your-page/client-page.tsx
-// 2. Update INPUT_FIELDS array with your form fields
-// 3. Update EXPECTED_RESULTS_SCHEMA array with expected N8N outputs
-// 4. Set WORKFLOW_ID to your unique workflow identifier
-// 5. Customize field labels and validation in UI sections
-//
-// 📋 FIELD TYPES EXPLAINED:
-// - INPUT_FIELDS: Temporary form data → N8N payload → cleared after send
-// - EXPECTED_RESULTS_SCHEMA: Expected N8N outputs → stored in results table
-// - WORKFLOW_ID: Unique identifier for workflow tracking and history
+// - PERSISTENT_FIELDS: Store N8N results or user data (require database columns)
+// - Real-time updates via SSE connection
+// - Complete N8N integration workflow
 // ==========================================
 
 "use client";
@@ -40,24 +22,22 @@ import { toast } from "sonner";
 import { AppHeader } from "~/components/layout/AppHeader";
 
 // ==========================================
-// 🔧 CUSTOMIZE THIS SECTION FOR YOUR USE CASE
+// 🔧 TEMPLATE CONFIGURATION
 // ==========================================
 
-// ✅ ALWAYS CUSTOMIZE: Replace with your form fields
-// These fields create form inputs that send data to N8N
+// Input fields: Form data sent to N8N (no database persistence needed)
 const INPUT_FIELDS = [
-  'orderDescription',   // Example: Replace with your input field names
-  'urgencyLevel'        // Example: Replace with your input field names
+  'orderDescription',   // Order details and requirements
+  'urgencyLevel'        // Priority level for processing
 ];
 
-// ✅ ALWAYS CUSTOMIZE: Replace with your database fields  
-// These fields store N8N results and user data (require database columns)
+// Persistent fields: Store N8N results and user data (require database columns)
 const PERSISTENT_FIELDS = [
-  'aiRecommendation',  // Example: N8N analysis result (read-only)
-  'finalDecision'      // Example: User can edit this field and save back
+  'aiRecommendation',  // N8N analysis result (read-only)
+  'finalDecision'      // User can edit this field and save back
 ];
 
-// ✅ ALWAYS CUSTOMIZE: Define what output structure this template expects from N8N
+// Define what output structure this template expects from N8N
 const EXPECTED_RESULTS_SCHEMA = {
   aiRecommendation: 'string',
   confidence: 'number', 
@@ -65,17 +45,11 @@ const EXPECTED_RESULTS_SCHEMA = {
 } as const;
 
 // Workflow identifier for this template
-const WORKFLOW_ID = 'order-processing'; // ✅ CUSTOMIZE: Update for your use case
+const WORKFLOW_ID = 'template-processing';
 
-// 💡 TEMPLATE ADAPTATION EXAMPLES:
-// E-commerce: INPUT_FIELDS = ['customerEmail', 'productSku', 'orderQuantity']
-// Support: INPUT_FIELDS = ['ticketSubject', 'issueCategory', 'priorityLevel']
-// Content: INPUT_FIELDS = ['articleTitle', 'contentType', 'publishDate']
-// ==========================================
-
-export function N8nDemoClient() {
+export function TemplatePageClient() {
   // ==========================================
-  // ❌ NEVER MODIFY: Core Template State Management
+  // State Management
   // ==========================================
   const utils = clientApi.useUtils();
   
@@ -96,7 +70,6 @@ export function N8nDemoClient() {
   const [isConnected, setIsConnected] = useState(false);
   const [lastUpdate, setLastUpdate] = useState<string | null>(null);
   const [highlightedFields, setHighlightedFields] = useState<Set<string>>(new Set());
-  const [showDebug, setShowDebug] = useState(false);
   const eventSourceRef = useRef<EventSource | null>(null);
 
   // Results and run history state
@@ -123,7 +96,7 @@ export function N8nDemoClient() {
   };
 
   // ==========================================
-  // ❌ NEVER MODIFY: Core Template tRPC Queries & Mutations
+  // tRPC Queries & Mutations
   // ==========================================
   const {
     data: userData,
@@ -197,17 +170,6 @@ export function N8nDemoClient() {
       },
     });
 
-  const { data: debugInfo, refetch: refetchDebug } = 
-    clientApi.internal.debugDatabase.useQuery();
-
-  const { 
-    data: connectionTestResult, 
-    refetch: testConnection, 
-    isLoading: isTestingConnection 
-  } = clientApi.internal.testConnection.useQuery(undefined, {
-    enabled: false,
-  });
-
   // New queries for results management
   const { data: workflowHistory, refetch: refetchHistory } = 
     clientApi.internal.getWorkflowHistory.useQuery({
@@ -225,7 +187,7 @@ export function N8nDemoClient() {
   const { mutate: deleteRun, isPending: isDeletingRun } = 
     clientApi.internal.deleteRun.useMutation({
       onSuccess: (data) => {
-        toast.success("Run deleted successfully");
+        toast.success("Order processing run deleted");
         // Close details if we're deleting the selected run
         if (selectedRunId === data.id) {
           setSelectedRunId(null);
@@ -251,7 +213,7 @@ export function N8nDemoClient() {
   }, [refetchHistory]);
 
   // ==========================================
-  // ❌ NEVER MODIFY: Core Template Real-Time Updates via SSE
+  // Real-Time Updates via SSE
   // ==========================================
   useEffect(() => {
     const eventSource = new EventSource("/api/stream/user-updates");
@@ -393,136 +355,69 @@ export function N8nDemoClient() {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Global Header */}
-      <AppHeader currentPage="N8N Demo" />
-      
+      <AppHeader 
+        currentPage="Template" 
+        showBackButton={true}
+        backButtonText="← Back to Dashboard"
+        backButtonHref="/dashboard"
+      />
+
       {/* Main Content */}
       <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="space-y-6">
-          
-          {/* ==========================================
-              🎨 OPTIONALLY CUSTOMIZE: Page Header & Description
-              ========================================== */}
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle>N8N Integration Demo - Dynamic Field Handling</CardTitle>
-                {/* Connection Status */}
-                <div className="flex items-center space-x-2">
-                  <div className={`w-3 h-3 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`} />
-                  <span className="text-sm text-muted-foreground">
-                    {isConnected ? 'Live Updates Connected' : 'Disconnected'}
-                  </span>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-2 text-sm text-muted-foreground">
-                {/* ✅ CUSTOMIZE: Update description for your use case */}
-                <p>
-                  <strong>Demo Pattern:</strong> This demo shows clear separation between input fields and persistent fields.
-                </p>
-                <p>
-                  <strong>Input Fields:</strong> Form data sent to N8N (no database persistence needed)
-                </p>
-                <p>
-                  <strong>Persistent Fields:</strong> Store N8N results or user-specific data (require database columns)
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-
-        {/* Usage Credits Overview */}
-        <Card>
+        {/* Template Description */}
+        <Card className="mb-8">
           <CardHeader>
-            <CardTitle className="flex items-center space-x-2">
-              <div className="w-4 h-4 rounded-full bg-blue-500" />
-              <span>Usage Credits Overview</span>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
-                <div className="text-2xl font-bold text-blue-700">
-                  {(() => {
-                    const credits = (userData as { usage_credits?: string | number })?.usage_credits;
-                    if (credits === null || credits === undefined) return "—";
-                    const creditsNum = typeof credits === 'string' ? parseInt(credits, 10) : credits;
-                    return isNaN(creditsNum) ? "—" : creditsNum.toLocaleString();
-                  })()}
-                </div>
-                <div className="text-sm text-blue-600 font-medium">Available Credits</div>
-                <div className="text-xs text-muted-foreground mt-1">
-                  From your subscription plan
-                </div>
-              </div>
-              
-              <div className="p-4 bg-green-50 rounded-lg border border-green-200">
-                <div className="text-2xl font-bold text-green-700">
-                  {(() => {
-                    const credits = (userData as { usage_credits?: string | number })?.usage_credits;
-                    if (credits === null || credits === undefined) return "—";
-                    const creditsNum = typeof credits === 'string' ? parseInt(credits, 10) : credits;
-                    if (isNaN(creditsNum)) return "—";
-                    
-                    // Simple status based on credit amount
-                    if (creditsNum > 500) return "High";
-                    if (creditsNum > 100) return "Medium";
-                    if (creditsNum > 0) return "Low";
-                    return "Empty";
-                  })()}
-                </div>
-                <div className="text-sm text-green-600 font-medium">Credit Status</div>
-                <div className="text-xs text-muted-foreground mt-1">
-                  Current usage level
-                </div>
-              </div>
-              
-              <div className="p-4 bg-orange-50 rounded-lg border border-orange-200">
-                <div className="text-2xl font-bold text-orange-700">
-                  ∞
-                </div>
-                <div className="text-sm text-orange-600 font-medium">Monthly Quota</div>
-                <div className="text-xs text-muted-foreground mt-1">
-                  Resets with billing cycle
-                </div>
+            <div className="flex items-center justify-between">
+              <CardTitle>Order Management Template</CardTitle>
+              {/* Connection Status */}
+              <div className="flex items-center space-x-2">
+                <div className={`w-3 h-3 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`} />
+                <span className="text-sm text-muted-foreground">
+                  {isConnected ? 'Live Updates' : 'Disconnected'}
+                </span>
               </div>
             </div>
-            
-            <div className="mt-4 p-3 bg-gray-50 rounded-md">
-              <div className="text-sm text-muted-foreground">
-                <strong>How Credits Work:</strong> Each N8N request includes your current credit balance. 
-                Your N8N workflow can check available credits and optionally deduct them for usage-based billing.
-              </div>
+          </CardHeader>
+          <CardContent>
+            <p className="text-muted-foreground mb-4">
+              This template demonstrates order processing automation with N8N integration. 
+              Enter order details, send to N8N for processing, and receive automated recommendations.
+            </p>
+            <div className="text-sm text-muted-foreground">
+              <p><strong>Input Fields:</strong> Order details sent to N8N (no database persistence)</p>
+              <p><strong>Persistent Fields:</strong> Store N8N results and user decisions (saved to database)</p>
             </div>
           </CardContent>
         </Card>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           
-          {/* ==========================================
-              🎨 OPTIONALLY CUSTOMIZE: Input Fields UI
-              ========================================== */}
+          {/* Input Section */}
           <Card>
             <CardHeader>
-              <CardTitle>Input Section</CardTitle> {/* ✅ CUSTOMIZE: Update section title */}
+              <CardTitle>Order Input</CardTitle>
               <p className="text-sm text-muted-foreground">
-                Form inputs sent to N8N (no database persistence needed)
+                Enter order details to send to N8N for processing
               </p>
             </CardHeader>
             <CardContent className="space-y-4">
               {INPUT_FIELDS.map((fieldName) => (
                 <div key={fieldName} className="space-y-2">
                   <Label htmlFor={`${fieldName}-input`}>
-                    {/* ✅ CUSTOMIZE: Update field label logic for your use case */}
-                    {fieldName.charAt(0).toUpperCase() + fieldName.slice(1).replace(/([A-Z])/g, ' $1')}
+                    {fieldName === 'orderDescription' ? 'Order Description' : 
+                     fieldName === 'urgencyLevel' ? 'Urgency Level' :
+                     fieldName.charAt(0).toUpperCase() + fieldName.slice(1).replace(/([A-Z])/g, ' $1')}
                   </Label>
                   <Input
                     id={`${fieldName}-input`}
                     value={inputData[fieldName] ?? ""}
                     onChange={(e) => updateInputField(fieldName, e.target.value)}
-                    placeholder={`Enter ${fieldName}`} // ✅ CUSTOMIZE: Update placeholder text
+                    placeholder={
+                      fieldName === 'orderDescription' ? 'Describe the order requirements...' :
+                      fieldName === 'urgencyLevel' ? 'e.g., High, Medium, Low' :
+                      `Enter ${fieldName}`
+                    }
                     disabled={isSendingToN8n}
-                    // ✅ CUSTOMIZE: Add field-specific validation, styling, etc.
                   />
                 </div>
               ))}
@@ -532,12 +427,11 @@ export function N8nDemoClient() {
                 disabled={isSendingToN8n}
                 className="w-full"
               >
-                {/* ✅ CUSTOMIZE: Update button text for your use case */}
-                {isSendingToN8n ? "Sending to N8N..." : "Send to N8N"}
+                {isSendingToN8n ? "Processing Order..." : "Send to N8N"}
               </Button>
               
               <p className="text-xs text-muted-foreground">
-                Input fields are cleared after sending to N8N.
+                Input fields are cleared after sending to N8N for processing.
               </p>
             </CardContent>
           </Card>
@@ -545,28 +439,29 @@ export function N8nDemoClient() {
           {/* Persistent Data Section */}
           <Card>
             <CardHeader>
-              <CardTitle>Persistent Data Section</CardTitle>
+              <CardTitle>Order Status</CardTitle>
               <p className="text-sm text-muted-foreground">
-                Database fields that store N8N results or user-specific data
+                N8N processing results and user decisions
               </p>
             </CardHeader>
             <CardContent className="space-y-4">
               {isLoadingData ? (
-                <p className="text-muted-foreground">Loading persistent data...</p>
+                <p className="text-muted-foreground">Loading order data...</p>
               ) : (
                 <>
                   {PERSISTENT_FIELDS.map((fieldName) => {
                     const currentValue = persistentData[fieldName] ?? '';
                     const editableValue = editableValues[fieldName] ?? '';
-                    const isEditable = fieldName === 'finalDecision'; // Example: only finalDecision is editable
+                    const isEditable = fieldName === 'finalDecision'; // Only finalDecision is editable
                     const isSaving = savingFields.has(fieldName);
                     const hasChanged = editableValue !== currentValue;
                     
                     return (
                       <div key={fieldName} className="space-y-2">
                         <Label>
-                          {fieldName.charAt(0).toUpperCase() + fieldName.slice(1).replace(/([A-Z])/g, ' $1')}
-                          {isEditable && " (Editable)"}
+                          {fieldName === 'aiRecommendation' ? 'AI Recommendation' :
+                           fieldName === 'finalDecision' ? 'Final Decision (Editable)' :
+                           fieldName.charAt(0).toUpperCase() + fieldName.slice(1).replace(/([A-Z])/g, ' $1')}
                         </Label>
                         
                         {isEditable ? (
@@ -574,7 +469,7 @@ export function N8nDemoClient() {
                             <Input
                               value={editableValue}
                               onChange={(e) => updateEditableField(fieldName, e.target.value)}
-                              placeholder={`Enter ${fieldName}`}
+                              placeholder="Enter your final decision..."
                               className={getFieldHighlight(fieldName)}
                               disabled={isSaving}
                             />
@@ -588,7 +483,7 @@ export function N8nDemoClient() {
                           </div>
                         ) : (
                           <div className={`p-3 border rounded-md bg-muted ${getFieldHighlight(fieldName)}`}>
-                            {currentValue || "(empty)"}
+                            {currentValue || "(Waiting for N8N response...)"}
                           </div>
                         )}
                       </div>
@@ -597,7 +492,7 @@ export function N8nDemoClient() {
                   
                   {lastUpdate && (
                     <div className="text-sm text-muted-foreground">
-                      Last updated via webhook: {new Date(lastUpdate).toLocaleString()}
+                      Last updated: {new Date(lastUpdate).toLocaleString()}
                     </div>
                   )}
                 </>
@@ -607,10 +502,10 @@ export function N8nDemoClient() {
         </div>
 
         {/* Run History Section */}
-        <Card>
+        <Card className="mt-8">
           <CardHeader>
             <CardTitle className="flex items-center justify-between">
-              <span>Run History</span>
+              <span>Order Processing History</span>
               {currentRunId && (
                 <div className="flex items-center space-x-2">
                   <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
@@ -621,7 +516,7 @@ export function N8nDemoClient() {
               )}
             </CardTitle>
             <p className="text-sm text-muted-foreground">
-              Track all workflow executions and view detailed results
+              Track all order processing workflows and view detailed results
             </p>
           </CardHeader>
           <CardContent>
@@ -681,7 +576,7 @@ export function N8nDemoClient() {
                                   deleteRun({ id: run.id });
                                 }}
                                 disabled={isDeletingRun}
-                                title="Delete run"
+                                title="Delete order processing run"
                               >
                                 ×
                               </Button>
@@ -694,11 +589,11 @@ export function N8nDemoClient() {
                       {isSelected && (
                         <div className="ml-6 p-3 bg-gray-50 rounded-md border">
                           {isLoadingRunDetails ? (
-                            <div className="text-sm text-muted-foreground">Loading details...</div>
+                            <div className="text-sm text-muted-foreground">Loading order details...</div>
                           ) : selectedRunDetails ? (
                             <div className="space-y-3">
                               <div>
-                                <h5 className="font-medium text-sm mb-2">Input Data:</h5>
+                                <h5 className="font-medium text-sm mb-2">Order Input:</h5>
                                 <pre className="text-xs bg-white p-2 rounded border overflow-x-auto">
                                   {JSON.stringify(selectedRunDetails.input_data, null, 2)}
                                 </pre>
@@ -706,7 +601,7 @@ export function N8nDemoClient() {
                               
                               {selectedRunDetails.output_data && (
                                 <div>
-                                  <h5 className="font-medium text-sm mb-2">Output Data:</h5>
+                                  <h5 className="font-medium text-sm mb-2">Processing Results:</h5>
                                   <pre className="text-xs bg-white p-2 rounded border overflow-x-auto">
                                     {JSON.stringify(selectedRunDetails.output_data, null, 2)}
                                   </pre>
@@ -724,7 +619,7 @@ export function N8nDemoClient() {
                               
                               <div className="grid grid-cols-2 gap-4 text-xs">
                                 <div>
-                                  <span className="text-muted-foreground">Run ID:</span>
+                                  <span className="text-muted-foreground">Order ID:</span>
                                   <div className="font-mono">{selectedRunDetails.id}</div>
                                 </div>
                                 <div>
@@ -734,7 +629,7 @@ export function N8nDemoClient() {
                               </div>
                             </div>
                           ) : (
-                            <div className="text-sm text-red-600">Failed to load run details</div>
+                            <div className="text-sm text-red-600">Failed to load order details</div>
                           )}
                         </div>
                       )}
@@ -744,221 +639,13 @@ export function N8nDemoClient() {
               </div>
             ) : (
               <div className="text-center py-8 text-muted-foreground">
-                <div className="text-sm">No workflow runs yet</div>
-                <div className="text-xs mt-1">Submit the form above to create your first run</div>
+                <div className="text-sm">No order processing history yet</div>
+                <div className="text-xs mt-1">Submit an order above to create your first processing record</div>
               </div>
             )}
           </CardContent>
         </Card>
-
-        {/* N8N Integration Instructions */}
-        <Card>
-          <CardHeader>
-            <CardTitle>N8N Integration Instructions</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-4">
-              <div className="p-4 bg-blue-50 rounded-md">
-                <h4 className="font-semibold mb-2">🔧 Setup Required Database Fields</h4>
-                <p className="text-sm text-muted-foreground mb-2">
-                  Only persistent fields need database columns. Run these commands:
-                </p>
-                <pre className="text-xs bg-white p-2 rounded border">
-{`npm run add-field aiRecommendation
-npm run add-field finalDecision`}
-                </pre>
-              </div>
-              
-              <div className="p-4 bg-green-50 rounded-md">
-                <h4 className="font-semibold mb-2">📤 Enhanced N8N Payload (What N8N Receives)</h4>
-                <pre className="text-xs bg-white p-2 rounded border">
-{`{
-  "user_id": "user-uuid-here",
-  "id": "results-uuid-for-tracking",
-  "workflow_id": "${WORKFLOW_ID}",
-  "user_email": "user@example.com",
-  "usage_credits": 1000,
-  "data": {
-    "orderDescription": "user_input_value",
-    "urgencyLevel": "user_input_value"
-  },
-  "expected_results_schema": {
-    "aiRecommendation": "string",
-    "confidence": "number", 
-    "reasoning": "string"
-  },
-  "action": "process"
-}`}
-                </pre>
-                <p className="text-xs text-muted-foreground mt-2">
-                  <strong>id:</strong> Track this specific run in the results table<br/>
-                  <strong>expected_results_schema:</strong> Output structure N8N should return
-                </p>
-              </div>
-              
-              <div className="p-4 bg-orange-50 rounded-md">
-                <h4 className="font-semibold mb-2">📥 New N8N Webhook Format (What N8N Should Send Back)</h4>
-                <p className="text-sm text-muted-foreground mb-2">
-                  Send webhook to track progress and completion:
-                </p>
-                <pre className="text-xs bg-white p-2 rounded border">
-{`POST ${typeof window !== 'undefined' ? window.location.origin : ''}/api/webhooks/internal-updated
-
-// Progress Update:
-{
-  "id": "same-results-uuid-from-request",
-  "status": "analyzing"
-}
-
-// Completion with Results:
-{
-  "id": "same-results-uuid-from-request", 
-  "status": "completed",
-  "credit_cost": 25,
-  "output_data": {
-    "aiRecommendation": "Process immediately",
-    "confidence": 0.85,
-    "reasoning": "High priority order with verified customer"
-  }
-}
-
-// Error:
-{
-  "id": "same-results-uuid-from-request",
-  "status": "failed",
-  "output_data": {
-    "error": "Processing timeout"
-  }
-}`}
-                </pre>
-                <p className="text-xs text-muted-foreground mt-2">
-                  <strong>credit_cost:</strong> Optional credits to deduct from user balance<br/>
-                  <strong>output_data:</strong> Results matching expected_results_schema
-                </p>
-              </div>
-              
-              <div className="p-4 bg-purple-50 rounded-md">
-                <h4 className="font-semibold mb-2">🔄 Expected N8N Workflow</h4>
-                <ol className="text-sm text-muted-foreground space-y-1">
-                  <li>1. Receive payload at `/webhook/your-n8n-endpoint`</li>
-                  <li>2. Check user&apos;s <strong>usage_credits</strong> for available quota</li>
-                  <li>3. Process business logic (calculate costs, determine processing time, etc.)</li>
-                  <li>4. Optionally deduct credits by updating <strong>usage_credits</strong> field</li>
-                  <li>5. Update database directly with calculated values</li>
-                  <li>6. Send webhook back to `/api/webhooks/internal-updated` with updated field names</li>
-                  <li>7. Watch persistent fields update automatically with highlighting</li>
-                </ol>
-                <p className="text-xs text-muted-foreground mt-2">
-                  <strong>Usage Credits:</strong> Use the included credits value for quota enforcement, billing calculations, or feature gating. Credits are allocated when invoice payments succeed, not when subscriptions change.
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* System Information */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center justify-between">
-              System Information
-              <div className="flex space-x-2">
-                <Button 
-                  variant="outline" 
-                  size="sm"
-                  onClick={() => void testConnection()}
-                  disabled={isTestingConnection}
-                >
-                  {isTestingConnection ? "Testing..." : "Test DB Connection"}
-                </Button>
-                <Button 
-                  variant="outline" 
-                  size="sm"
-                  onClick={() => {
-                    setShowDebug(!showDebug);
-                    void refetchDebug();
-                  }}
-                >
-                  {showDebug ? "Hide Debug" : "Show Debug"}
-                </Button>
-              </div>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
-              <div>
-                <strong>User ID:</strong> {(userData as { UID?: string })?.UID ?? "Not initialized"}
-              </div>
-              <div>
-                <strong>Connection Status:</strong> {isConnected ? "Connected" : "Disconnected"}
-              </div>
-              <div>
-                <strong>Last Activity:</strong> {lastUpdate ? new Date(lastUpdate).toLocaleTimeString() : "None"}
-              </div>
-              <div>
-                <strong>Usage Credits:</strong> {
-                  (() => {
-                    const credits = (userData as { usage_credits?: string | number })?.usage_credits;
-                    if (credits === null || credits === undefined) return "Not set";
-                    const creditsNum = typeof credits === 'string' ? parseInt(credits, 10) : credits;
-                    return isNaN(creditsNum) ? "Not set" : creditsNum.toLocaleString();
-                  })()
-                }
-              </div>
-            </div>
-            
-            {connectionTestResult && (
-              <div className="mt-4 p-4 bg-blue-50 rounded-md">
-                <h4 className="font-semibold mb-2">Connection Test Results:</h4>
-                <div className="space-y-2 text-sm">
-                  <div><strong>Status:</strong> {connectionTestResult.success ? "✅ Success" : "❌ Failed"}</div>
-                  <div><strong>Database URL:</strong> {connectionTestResult.databaseUrl}</div>
-                  {connectionTestResult.success && connectionTestResult.connectionInfo && (
-                    <>
-                      <div><strong>Database:</strong> {(connectionTestResult.connectionInfo as { database_name?: string }).database_name}</div>
-                      <div><strong>User:</strong> {(connectionTestResult.connectionInfo as { database_user?: string }).database_user}</div>
-                      <div><strong>Server:</strong> {(connectionTestResult.connectionInfo as { server_address?: string }).server_address}:{(connectionTestResult.connectionInfo as { server_port?: string }).server_port}</div>
-                    </>
-                  )}
-                  {connectionTestResult.error && (
-                    <div className="text-red-600"><strong>Error:</strong> {connectionTestResult.error}</div>
-                  )}
-                </div>
-              </div>
-            )}
-            
-            {showDebug && debugInfo && (
-              <div className="mt-4 p-4 bg-gray-100 rounded-md">
-                <h4 className="font-semibold mb-2">Database Debug Information:</h4>
-                <div className="space-y-2 text-sm">
-                  <div><strong>Connection:</strong> {debugInfo.connection}</div>
-                  <div><strong>Database URL:</strong> {debugInfo.databaseUrl}</div>
-                  <div><strong>Table Status:</strong> {debugInfo.tableExists}</div>
-                  <div><strong>Total Records:</strong> {debugInfo.userDataCount}</div>
-                  <div><strong>Current User ID:</strong> {debugInfo.currentUserId}</div>
-                  {debugInfo.connectionInfo && (
-                    <>
-                      <div><strong>Database:</strong> {(debugInfo.connectionInfo as { database_name?: string }).database_name}</div>
-                      <div><strong>Server:</strong> {(debugInfo.connectionInfo as { server_address?: string }).server_address}:{(debugInfo.connectionInfo as { server_port?: string }).server_port}</div>
-                    </>
-                  )}
-                  {debugInfo.error && (
-                    <div className="text-red-600"><strong>Error:</strong> {debugInfo.error}</div>
-                  )}
-                  {debugInfo.allUserData && debugInfo.allUserData.length > 0 && (
-                    <div>
-                      <strong>All Data:</strong>
-                      <pre className="mt-1 text-xs bg-white p-2 rounded overflow-auto max-h-32">
-                        {JSON.stringify(debugInfo.allUserData, null, 2)}
-                      </pre>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-        </div>
       </main>
     </div>
   );
-}
+} 

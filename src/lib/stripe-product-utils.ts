@@ -1,6 +1,6 @@
 import type Stripe from "stripe";
-import type { StripeSubscriptionData } from "./subscription-db";
-import { stripe } from "./payments/stripe";
+import type { StripeSubscriptionData } from "~/lib/subscription-db";
+import { stripe } from "~/lib/payments/stripe";
 
 /**
  * Core utility to resolve product name from Stripe price ID
