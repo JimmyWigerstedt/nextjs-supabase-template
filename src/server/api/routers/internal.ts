@@ -468,4 +468,109 @@ export const internalRouter = createTRPCRouter({
       }
     }),
 
+  getLatestResults: authorizedProcedure
+    .input(z.object({ workflow_id: z.string() }))
+    .query(async ({ input, ctx }) => {
+      const client = await internalDb.connect();
+      try {
+        const result = await client.query(
+          `SELECT * FROM "${env.NC_SCHEMA}"."results" 
+           WHERE "user_id" = $1 AND "workflow_id" = $2 
+           ORDER BY "created_at" DESC 
+           LIMIT 1`,
+          [ctx.supabaseUser!.id, input.workflow_id]
+        );
+        
+        if (result.rows.length === 0) {
+          return null;
+        }
+        
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        const record = result.rows[0] as {
+          id: string;
+          user_id: string;
+          workflow_id: string;
+          input_data: object;
+          output_data: object | null;
+          status: string;
+          created_at: string;
+          completed_at: string | null;
+          duration_ms: number | null;
+          error_message: string | null;
+          credits_consumed: number;
+          retry_count: number;
+          parent_id: string | null;
+        };
+        
+        return record;
+      } catch (error) {
+        console.error('Failed to get latest results:', error);
+        throw new Error('Failed to retrieve latest results');
+      } finally {
+        client.release();
+      }
+    }),
+
+  updateResultsOutputData: authorizedProcedure
+    .input(z.object({ 
+      results_id: z.string().uuid(), 
+      output_data: z.record(z.string(), z.any()) 
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const client = await internalDb.connect();
+      try {
+        // First verify the results record belongs to the user
+        const verifyResult = await client.query(
+          `SELECT "user_id" FROM "${env.NC_SCHEMA}"."results" WHERE "id" = $1`,
+          [input.results_id]
+        );
+        
+        if (verifyResult.rows.length === 0) {
+          throw new Error('Results record not found');
+        }
+        
+        const record = verifyResult.rows[0] as { user_id: string };
+        if (record.user_id !== ctx.supabaseUser!.id) {
+          throw new Error('Access denied');
+        }
+        
+        // Update the output_data
+        const updateResult = await client.query(
+          `UPDATE "${env.NC_SCHEMA}"."results" 
+           SET "output_data" = $1::jsonb, "updated_at" = CURRENT_TIMESTAMP 
+           WHERE "id" = $2 
+           RETURNING *`,
+          [JSON.stringify(input.output_data), input.results_id]
+        );
+        
+        if (updateResult.rows.length === 0) {
+          throw new Error('Failed to update results');
+        }
+        
+        console.log(`[updateResultsOutputData] Updated results ${input.results_id} for user ${ctx.supabaseUser!.id}`);
+        
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        return updateResult.rows[0] as {
+          id: string;
+          user_id: string;
+          workflow_id: string;
+          input_data: object;
+          output_data: object | null;
+          status: string;
+          created_at: string;
+          completed_at: string | null;
+          duration_ms: number | null;
+          error_message: string | null;
+          credits_consumed: number;
+          retry_count: number;
+          parent_id: string | null;
+        };
+      } catch (error) {
+        console.error('Failed to update results output data:', error);
+        throw new Error('Failed to update results output data');
+      } finally {
+        client.release();
+      }
+    }),
+
 }); 

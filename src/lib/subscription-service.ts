@@ -4,13 +4,13 @@ import {
   type StripeSubscriptionData,
   updateMinimalSubscriptionData,
   getMinimalSubscriptionData
-} from "./subscription-db";
+} from "~/lib/subscription-db";
 import {
   getPlanNameFromSubscriptionData,
   getPlanNameFromStripeSubscription,
   checkFeatureAccess
-} from "./stripe-product-utils";
-import { stripe } from "./payments/stripe";
+} from "~/lib/stripe-product-utils";
+import { stripe } from "~/lib/payments/stripe";
 
 export class SubscriptionService {
   /**

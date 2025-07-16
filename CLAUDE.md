@@ -109,8 +109,7 @@ const EXPECTED_RESULTS_SCHEMA = ['result1', 'result2']; // Expected N8N outputs
 ## File Structure
 
 ### Pages
-- `src/app/n8n-demo/` - **Template reference implementation**
-- `src/app/template-page/` - Example adaptation
+- `src/app/template-page/` - **Primary template implementation**
 - `src/app/(dashboard)/` - Main app pages
 - `src/app/(auth)/` - Login/signup pages
 
@@ -132,6 +131,7 @@ const EXPECTED_RESULTS_SCHEMA = ['result1', 'result2']; // Expected N8N outputs
 - `src/components/layout/AppHeader.tsx` - Global header
 - `src/lib/sse-utils.ts` - Real-time updates
 - `src/app/api/` - Webhook handlers and SSE endpoints
+- `src/hooks/useN8nWorkflow.ts` - **Centralized N8N workflow state management hook**
 
 ## Database Schema
 
@@ -156,7 +156,7 @@ const EXPECTED_RESULTS_SCHEMA = ['result1', 'result2']; // Expected N8N outputs
 "workflow_id" VARCHAR                  -- N8N workflow identifier
 "status" VARCHAR                       -- running, completed, failed, or custom
 "input_data" JSONB                     -- Original input sent to N8N
-"results" JSONB                        -- N8N workflow results
+"output_data" JSONB                    -- N8N workflow results
 "expected_results_schema" JSONB        -- Expected output fields
 "credits_used" INTEGER                 -- Credits consumed for this run
 "created_at" TIMESTAMP                 -- Run start time
@@ -166,16 +166,18 @@ const EXPECTED_RESULTS_SCHEMA = ['result1', 'result2']; // Expected N8N outputs
 
 ## Development Patterns
 
-### Creating New Pages
-1. **Copy template**: `cp src/app/n8n-demo/client-page.tsx src/app/your-page/client-page.tsx`
-2. **Update field arrays**:
+### Creating New Pages (Optimized Hook Pattern)
+1. **Copy template**: `cp src/app/template-page/client-page.tsx src/app/your-page/client-page.tsx`
+2. **Update configuration arrays**:
    ```typescript
    const INPUT_FIELDS = ['yourField1', 'yourField2'];
-   const EXPECTED_RESULTS_SCHEMA = ['resultField1', 'resultField2'];
+   const PERSISTENT_FIELDS = ['resultField1', 'resultField2'];  // Fields from results.output_data
+   const EXPECTED_RESULTS_SCHEMA = { resultField1: 'string', resultField2: 'number' };
+   const WORKFLOW_ID = 'your-workflow-name';
    ```
-3. **Set workflow ID**: Update `workflow_id` in sendToN8n call
-4. **Customize UI labels and validation**
-5. **Results automatically stored in results table**
+3. **Hook integration**: useN8nWorkflow handles all state management automatically
+4. **Customize UI**: Update field labels, validation, and component styling
+5. **Results automatically stored**: Complete audit trail with real-time updates
 
 ### Adding New Database Fields
 ```bash
@@ -191,8 +193,11 @@ npm run add-field newFieldName INTEGER
 // Get user data (includes Stripe metadata)
 const { data: userData } = api.internal.getUserData.useQuery();
 
-// Update any fields dynamically
-const { mutate: updateUserData } = api.internal.updateUserData.useMutation();
+// Get latest results for workflow
+const { data: latestResults } = api.internal.getLatestResults.useQuery({ workflow_id });
+
+// Update results output data (save functionality)
+const { mutate: updateResultsOutputData } = api.internal.updateResultsOutputData.useMutation();
 
 // Send to N8N with results tracking
 const { mutate: sendToN8n } = api.internal.sendToN8n.useMutation();
@@ -217,29 +222,57 @@ const { data: hasFeature } = api.payments.hasFeature.useQuery({
 });
 ```
 
-### Component State Pattern (Copy Exactly)
+### useN8nWorkflow Hook Pattern (Recommended)
 ```typescript
-// Required state for template components
+// Import the centralized hook
+import { useN8nWorkflow } from "~/hooks/useN8nWorkflow";
+
+// Use the hook in your component
+const {
+  // State
+  inputData,
+  persistentData,
+  editableValues,
+  savingFields,
+  isConnected,
+  currentRunId,
+  currentRunStatus,
+  
+  // Data
+  userData,
+  latestResults,
+  workflowHistory,
+  runDetails,
+  
+  // Loading states
+  isLoadingData,
+  isLoadingLatestResults,
+  isSendingToN8n,
+  
+  // Actions
+  updateInputField,
+  handleSendToN8n,
+  handleSaveField,
+  handleSelectRun,
+  handleDeleteRun,
+} = useN8nWorkflow({
+  inputFields: INPUT_FIELDS,
+  persistentFields: PERSISTENT_FIELDS,
+  workflowId: WORKFLOW_ID,
+  expectedResultsSchema: EXPECTED_RESULTS_SCHEMA,
+});
+```
+
+### Legacy Component State Pattern (Deprecated)
+```typescript
+// ⚠️ DEPRECATED: Use useN8nWorkflow hook instead
+// This pattern is maintained for reference only
 const [inputData, setInputData] = useState<Record<string, string>>(
   INPUT_FIELDS.reduce((acc, field) => {
     acc[field] = "";
     return acc;
   }, {} as Record<string, string>)
 );
-
-// Results table state management
-const [currentRunId, setCurrentRunId] = useState<string | null>(null);
-const [lastUpdate, setLastUpdate] = useState<number>(Date.now());
-const [isConnected, setIsConnected] = useState(false);
-
-// Required ref for avoiding stale closures
-const currentRunIdRef = useRef<string | null>(null);
-const refetchHistoryRef = useRef<(() => void) | null>(null);
-
-// Required helper functions
-const updateInputField = (fieldName: string, value: string) => {
-  setInputData(prev => ({ ...prev, [fieldName]: value }));
-};
 ```
 
 ## Critical: Do Not Modify
@@ -253,17 +286,17 @@ const updateInputField = (fieldName: string, value: string) => {
   "usage_credits": 1000,
   "data": { ...INPUT_FIELDS },
   "action": "process",
-  "run_id": "uuid",                    // NEW: Results table reference
-  "workflow_id": "workflow_name",      // NEW: Workflow identifier
-  "expected_results_schema": ["field1", "field2"] // NEW: Expected outputs
+  "id": "uuid",                        // Results table reference
+  "workflow_id": "workflow_name",      // Workflow identifier
+  "expected_results_schema": { "field1": "string", "field2": "number" } // Expected outputs
 }
 
 // N8N webhook response (required format)
 {
-  "run_id": "uuid",                    // NEW: Results table reference
-  "status": "completed",               // NEW: Run status
-  "results": { "field1": "value1" },   // NEW: Actual results
-  "credits_used": 10                   // NEW: Credit consumption
+  "id": "uuid",                        // Results table reference
+  "status": "completed",               // Run status
+  "output_data": { "field1": "value1" }, // Actual results
+  "credit_cost": 10                    // Credit consumption
 }
 ```
 
@@ -298,12 +331,13 @@ useEffect(() => {
       setLastUpdate(data.timestamp);
       void utils.internal.getUserData.invalidate();
     }
-    // NEW: Results table updates
-    if (data.type === "results-updated") {
-      if (data.runId === currentRunIdRef.current) {
-        // Handle current run updates
-        refetchHistoryRef.current?.();
+    // Results table updates
+    if (data.type === "result-updated" && data.id === currentRunIdRef.current) {
+      if (data.status) {
+        setCurrentRunStatus(data.status);
       }
+      void refetchWorkflowHistory();
+      void refetchLatestResults();
     }
   };
   
@@ -330,9 +364,9 @@ const featureMap: Record<string, string[]> = {
 ## Common Tasks
 
 ### Add New Workflow
-1. Copy n8n-demo structure to new page
-2. Update `INPUT_FIELDS` and `EXPECTED_RESULTS_SCHEMA` arrays
-3. Set unique `workflow_id` in sendToN8n call
+1. Copy template-page structure to new page
+2. Update `INPUT_FIELDS`, `PERSISTENT_FIELDS`, and `EXPECTED_RESULTS_SCHEMA` arrays
+3. Set unique `WORKFLOW_ID` constant
 4. Test N8N integration with results table
 
 ### Add New Field Type (for userData)
@@ -345,9 +379,10 @@ const featureMap: Record<string, string[]> = {
 2. Use `api.payments.hasFeature.useQuery()` in component
 
 ### Debug N8N Integration
-1. Check results table for run history: `api.internal.getWorkflowHistory.useQuery()`
-2. Inspect specific run: `api.internal.getRunDetails.useQuery({ runId })`
-3. Monitor SSE updates for real-time status
-4. Verify webhook payload matches expected format
+1. Check latest results: `api.internal.getLatestResults.useQuery({ workflow_id })`
+2. Check results table for run history: `api.internal.getWorkflowHistory.useQuery()`
+3. Inspect specific run: `api.internal.getRunDetails.useQuery({ runId })`
+4. Monitor SSE updates for real-time status
+5. Verify webhook payload matches expected format
 
 This template enables rapid workflow creation with complete audit trails and real-time tracking.

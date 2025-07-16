@@ -259,6 +259,7 @@ export const ensureResultsTableOnce = async () => {
           -- Status & timing  
           "status" VARCHAR NOT NULL DEFAULT 'processing',
           "created_at" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          "updated_at" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
           "completed_at" TIMESTAMP,
           "duration_ms" INTEGER,
           
@@ -321,6 +322,26 @@ export const ensureResultsTableOnce = async () => {
       } catch (error) {
         console.warn(`[internal-db] ⚠️ Could not create index ${name}:`, error instanceof Error ? error.message : String(error));
       }
+    }
+    
+    // Add updated_at field if it doesn't exist (migration)
+    try {
+      const columnCheck = await client.query(`
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_schema = $1 AND table_name = 'results' AND column_name = 'updated_at'
+      `, [env.NC_SCHEMA]);
+      
+      if (columnCheck.rows.length === 0) {
+        console.log(`[internal-db] 📝 Adding updated_at column to results table...`);
+        await client.query(`
+          ALTER TABLE "${env.NC_SCHEMA}"."results" 
+          ADD COLUMN "updated_at" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        `);
+        console.log(`[internal-db] ✅ updated_at column added`);
+      }
+    } catch (error) {
+      console.warn(`[internal-db] ⚠️ Could not add updated_at column:`, error instanceof Error ? error.message : String(error));
     }
     
     console.log('[internal-db] ✅ Results table setup completed');
